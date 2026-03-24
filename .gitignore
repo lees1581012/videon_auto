@@ -22,3 +22,15 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# macOS metadata files
+._*
+.Spotlight-V100
+.Trashes
+
+# Agent/Editor cache folders
+.agent/
+.codex/
+.gemini/
+.opencode/
+.windsurf/
