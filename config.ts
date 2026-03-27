@@ -1,9 +1,46 @@
 
 /**
- * TubeGen AI 전역 설정 파일
+ * AutoGen AI 전역 설정 파일
  * 보안을 위해 민감한 API 키는 이곳에 직접 입력하지 마세요.
  * 앱 내의 [설정] 메뉴를 통해 입력하면 브라우저에 안전하게 보관됩니다.
  */
+
+// ===== TTS 엔진 선택 =====
+// TTS 엔진 선택
+export type TtsEngine = 'elevenlabs' | 'edge' | 'gemini';
+
+// ===== 영상 포맷 타입 및 프리셋 =====
+
+// 영상 포맷 타입
+export type VideoFormat = 'landscape' | 'portrait';
+
+// 포맷별 설정
+export const VIDEO_FORMAT_PRESETS = {
+  landscape: {
+    label: '가로 16:9 (유튜브)',
+    width: 1280,
+    height: 720,
+    aspectRatio: '16:9' as const,
+    subtitleFontSize: 40,
+    subtitleBottomMargin: 80,
+    maxScenes: 100,        // 사실상 제한 없음
+    targetDurationSec: 0,  // 제한 없음
+    bitrate: 12_000_000,
+  },
+  portrait: {
+    label: '세로 9:16 (숏폼)',
+    width: 1080,
+    height: 1920,
+    aspectRatio: '9:16' as const,
+    subtitleFontSize: 56,
+    subtitleBottomMargin: 200,
+    maxScenes: 8,
+    targetDurationSec: 60,  // 최대 60초 목표
+    bitrate: 15_000_000,
+  },
+} as const;
+
+// ===== 이미지 생성 모델 목록 =====
 
 // 이미지 생성 모델 목록 (Gemini만 지원)
 export const IMAGE_MODELS = [
@@ -123,7 +160,9 @@ export const CONFIG = {
     // Gemini 전용 화풍 설정
     GEMINI_STYLE: 'tubegen_gemini_style',
     GEMINI_CUSTOM_STYLE: 'tubegen_gemini_custom_style',
-    PROJECTS: 'tubegen_projects'
+    PROJECTS: 'tubegen_projects',
+    TTS_ENGINE: 'tubegen_tts_engine',         // TTS 엔진 선택
+    EDGE_TTS_VOICE: 'tubegen_edge_tts_voice', // Edge TTS 음성
   },
 
   // 애니메이션 설정

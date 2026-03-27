@@ -52,7 +52,7 @@ export const SYSTEM_INSTRUCTIONS = {
 - 같은 개념은 같은 모습으로 그려라
 `,
 
-  REFERENCE_MATCH: `참조 이미지의 화풍을 따르되 졸라맨 규칙을 적용하라.`
+  REFERENCE_MATCH: `참조 이미지의 화풍을 따르되 캐릭터 규칙을 적용하라.`
 };
 
 /**
@@ -105,22 +105,28 @@ export const getTrendSearchPrompt = (category: string, _usedTopicsString: string
   `Search for 4 trending "${category}" topics. Return JSON: [{rank, topic, reason}]`;
 
 // 스크립트 생성 프롬프트
-export const getScriptGenerationPrompt = (topic: string, sourceContext?: string | null) => {
+export const getScriptGenerationPrompt = (topic: string, sourceContext?: string | null, videoFormat?: string) => {
   const isManual = !!sourceContext;
   const content = sourceContext || topic;
+  const isShort = videoFormat === 'portrait';
 
   return `
 # Task: Generate Storyboard for "${topic}"
 
 ## 씬 분할 규칙
-- 1문장 = 1씬 (기본)
-- 입력 문장 수 = 출력 씬 수
+${isShort ? `- 숏폼 모드: 전체 30~60초, 최대 4~8씬 (8씬 초과 절대 금지)
+- 각 씬 나레이션: 간결한 1~2문장 (15자 이내 권장)
+- 긴 대본이 입력되면 핵심만 압축하여 8씬 이내로 요약
+- 첫 씬: 시선을 사로잡는 후킹 문장
+- 마지막 씬: 행동 유도(CTA) 또는 강한 마무리` : `- 1문장 = 1씬 (기본)
+- 입력 문장 수 = 출력 씬 수`}
 - 같은 내용 반복 금지
 - ⚠️ narration 필드: 입력된 대본 문장을 그대로 복사해서 사용 (절대 "나레이션"이라고 쓰지 말것)
 
 ## 시각화
 - 문장 의미를 그대로 이미지화
 - 수식어 반영 ("거대한"→크게)
+${isShort ? '- 세로 화면(9:16)에 최적화된 중앙 집중 구도' : ''}
 
 ## 브랜드/유명인
 - 로고 또는 텍스트로 표시
@@ -153,5 +159,6 @@ ${content}
 ### 중요 ###
 - narration: 입력 텍스트의 각 문장을 그대로 사용할 것!
 - "나레이션"이라는 단어를 출력하면 안됨
+${isShort ? '- 숏폼: 반드시 8씬 이하로 생성할 것!' : ''}
 `;
 };

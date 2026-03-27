@@ -250,7 +250,8 @@ const generateScriptSingle = async (
   topic: string,
   hasReferenceImage: boolean,
   sourceContext?: string | null,
-  chunkInfo?: { current: number; total: number }
+  chunkInfo?: { current: number; total: number },
+  videoFormat?: string
 ): Promise<ScriptScene[]> => {
   return retryGeminiRequest("Script Generation", async () => {
     const ai = getAI();
@@ -280,7 +281,7 @@ const generateScriptSingle = async (
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: getScriptGenerationPrompt(topic, sourceContext),
+      contents: getScriptGenerationPrompt(topic, sourceContext, videoFormat),
       config: {
         thinkingConfig: { thinkingBudget: 24576 },
         responseMimeType: "application/json",
@@ -321,9 +322,10 @@ const generateScriptSingle = async (
 export const generateScript = async (
   topic: string,
   hasReferenceImage: boolean,
-  sourceContext?: string | null
+  sourceContext?: string | null,
+  videoFormat?: string
 ): Promise<ScriptScene[]> => {
-  return generateScriptSingle(topic, hasReferenceImage, sourceContext);
+  return generateScriptSingle(topic, hasReferenceImage, sourceContext, undefined, videoFormat);
 };
 
 /**
@@ -396,14 +398,15 @@ export const generateScriptChunked = async (
   hasReferenceImage: boolean,
   sourceContext: string,
   chunkSize: number = 2500,
-  onProgress?: (message: string) => void
+  onProgress?: (message: string) => void,
+  videoFormat?: string
 ): Promise<ScriptScene[]> => {
   const inputLength = sourceContext.length;
 
   // 청크 분할 기준 이하면 일반 처리
   if (inputLength <= chunkSize) {
     console.log(`[Chunked Script] 입력(${inputLength}자)이 청크 크기(${chunkSize}자) 이하. 일반 처리.`);
-    return generateScriptSingle(topic, hasReferenceImage, sourceContext);
+    return generateScriptSingle(topic, hasReferenceImage, sourceContext, undefined, videoFormat);
   }
 
   console.log(`[Chunked Script] ========================================`);
@@ -434,7 +437,8 @@ export const generateScriptChunked = async (
         topic,
         hasReferenceImage,
         chunkContext,
-        { current: i + 1, total: chunks.length }
+        { current: i + 1, total: chunks.length },
+        videoFormat
       );
 
       // 씬 번호 재조정 (이전 씬들 뒤에 이어서)
@@ -536,7 +540,8 @@ const getStrengthDescription = (strength: number): { level: string; instruction:
  */
 export const generateImageForScene = async (
   scene: ScriptScene,
-  referenceImages: ReferenceImages
+  referenceImages: ReferenceImages,
+  aspectRatio: '16:9' | '9:16' = '16:9'
 ): Promise<string | null> => {
   // 캐릭터 참조 이미지가 있으면 고정 프롬프트 제외
   const hasCharacterRef = referenceImages.character && referenceImages.character.length > 0;
@@ -628,7 +633,7 @@ Ensure the entire image consistently follows this visual style.`
           config: {
             responseModalities: [Modality.IMAGE],
             imageConfig: {
-              aspectRatio: '16:9'
+              aspectRatio: aspectRatio
             }
           }
         });

@@ -47,55 +47,75 @@ interface PreparedScene {
  * 자막 데이터를 청크로 변환
  * - AI 의미 단위 청크가 있으면 우선 사용 (22자 이하, 의미 단위)
  * - 없으면 기존 단어 수 기반으로 폴백
+ * - subtitleData가 없으면 나레이션 전체를 자막으로 표시
+ *
+ * @param subtitleData - 자막 데이터 (단어별 타임스탬프)
+ * @param config - 자막 설정
+ * @param narration - 나레이션 원문 (자막 데이터 없을 때 폴백용)
+ * @param duration - 씬 길이 (초) - 폴백 자막 표시 시간용
  */
 function createSubtitleChunks(
   subtitleData: SubtitleData | null,
-  config: SubtitleConfig
+  config: SubtitleConfig,
+  narration?: string,
+  duration?: number
 ): SubtitleChunk[] {
-  if (!subtitleData || subtitleData.words.length === 0) {
-    return [];
-  }
-
-  // AI 의미 단위 청크가 있으면 우선 사용
-  if (subtitleData.meaningChunks && subtitleData.meaningChunks.length > 0) {
-    console.log(`[Video] AI 의미 단위 자막 사용: ${subtitleData.meaningChunks.length}개 청크`);
-    return subtitleData.meaningChunks.map(chunk => ({
-      text: chunk.text,
-      startTime: chunk.startTime,
-      endTime: chunk.endTime
-    }));
-  }
-
-  // 폴백: 기존 단어 수 기반 분리
-  console.log('[Video] 기본 단어 수 기반 자막 사용');
-  const chunks: SubtitleChunk[] = [];
-  const words = subtitleData.words;
-  const wordsPerChunk = config.wordsPerLine * config.maxLines;
-
-  for (let i = 0; i < words.length; i += wordsPerChunk) {
-    const chunkWords = words.slice(i, Math.min(i + wordsPerChunk, words.length));
-
-    if (chunkWords.length === 0) continue;
-
-    const lines: string[] = [];
-    for (let j = 0; j < chunkWords.length; j += config.wordsPerLine) {
-      const lineWords = chunkWords.slice(j, j + config.wordsPerLine);
-      lines.push(lineWords.map(w => w.word).join(' '));
+  // 자막 데이터가 있으면 정상 처리
+  if (subtitleData && subtitleData.words.length > 0) {
+    // AI 의미 단위 청크가 있으면 우선 사용
+    if (subtitleData.meaningChunks && subtitleData.meaningChunks.length > 0) {
+      console.log(`[Video] AI 의미 단위 자막 사용: ${subtitleData.meaningChunks.length}개 청크`);
+      return subtitleData.meaningChunks.map(chunk => ({
+        text: chunk.text,
+        startTime: chunk.startTime,
+        endTime: chunk.endTime
+      }));
     }
 
-    chunks.push({
-      text: lines.join('\n'),
-      startTime: chunkWords[0].start,
-      endTime: chunkWords[chunkWords.length - 1].end
-    });
+    // 폴백: 기존 단어 수 기반 분리
+    console.log('[Video] 기본 단어 수 기반 자막 사용');
+    const chunks: SubtitleChunk[] = [];
+    const words = subtitleData.words;
+    const wordsPerChunk = config.wordsPerLine * config.maxLines;
+
+    for (let i = 0; i < words.length; i += wordsPerChunk) {
+      const chunkWords = words.slice(i, Math.min(i + wordsPerChunk, words.length));
+
+      if (chunkWords.length === 0) continue;
+
+      const lines: string[] = [];
+      for (let j = 0; j < chunkWords.length; j += config.wordsPerLine) {
+        const lineWords = chunkWords.slice(j, j + config.wordsPerLine);
+        lines.push(lineWords.map(w => w.word).join(' '));
+      }
+
+      chunks.push({
+        text: lines.join('\n'),
+        startTime: chunkWords[0].start,
+        endTime: chunkWords[chunkWords.length - 1].end
+      });
+    }
+
+    // 청크 간 간격 제거
+    for (let i = 0; i < chunks.length - 1; i++) {
+      chunks[i].endTime = chunks[i + 1].startTime;
+    }
+
+    return chunks;
   }
 
-  // 청크 간 간격 제거
-  for (let i = 0; i < chunks.length - 1; i++) {
-    chunks[i].endTime = chunks[i + 1].startTime;
+  // 폴백: 자막 데이터가 없지만 나레이션 있으면 전체 표시
+  if (narration && duration) {
+    console.log('[Video] 자막 데이터 없음, 나레이션 전체를 자막으로 표시');
+    return [{
+      text: narration,
+      startTime: 0,
+      endTime: duration
+    }];
   }
 
-  return chunks;
+  console.log('[Video] 자막 데이터 없음, 자막 미표시');
+  return [];
 }
 
 /**
@@ -158,11 +178,23 @@ function renderSubtitle(
   if (lines.length === 0) return;
 
   // 자막 스타일 설정
-  const lineHeight = config.fontSize * 1.4;
   const padding = 20;
   const safeMargin = 10; // 화면 경계 안전 여백
 
-  ctx.font = `bold ${config.fontSize}px ${config.fontFamily}`;
+  let actualFontSize = config.fontSize;
+  const maxTextWidth = canvas.width - 40; // 좌우 20px 여백
+
+  ctx.font = `bold ${actualFontSize}px ${config.fontFamily}`;
+
+  // 텍스트가 화면보다 넓으면 폰트 축소
+  const longestLine = lines.reduce((a, b) => ctx.measureText(a).width > ctx.measureText(b).width ? a : b, '');
+  while (ctx.measureText(longestLine).width > maxTextWidth && actualFontSize > 20) {
+    actualFontSize -= 2;
+    ctx.font = `bold ${actualFontSize}px ${config.fontFamily}`;
+  }
+
+  const lineHeight = actualFontSize * 1.4;
+
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
 
@@ -209,6 +241,7 @@ function renderSubtitle(
 export interface VideoExportOptions {
   enableSubtitles?: boolean;  // 자막 활성화 여부 (기본: true)
   subtitleConfig?: Partial<SubtitleConfig>;
+  videoFormat?: 'landscape' | 'portrait';  // 영상 포맷
 }
 
 // 실제 렌더링된 자막 타이밍 기록용 인터페이스
@@ -235,11 +268,32 @@ export const generateVideo = async (
   const enableSubtitles = options?.enableSubtitles ?? true;
   const config: SubtitleConfig = { ...DEFAULT_SUBTITLE_CONFIG, ...options?.subtitleConfig };
 
+  // 영상 포맷별 동적 설정
+  const fmt = options?.videoFormat || 'landscape';
+  const canvasWidth = fmt === 'portrait' ? 1080 : 1280;
+  const canvasHeight = fmt === 'portrait' ? 1920 : 720;
+  const videoBitrate = fmt === 'portrait' ? 15_000_000 : 12_000_000;
+
+  // 자막 기본값 오버라이드 (숏폼일 때)
+  if (fmt === 'portrait' && !options?.subtitleConfig) {
+    config.fontSize = 56;
+    config.bottomMargin = 200;
+  }
+
   // 이미지가 있는 모든 씬 포함 (오디오 없으면 기본 3초)
   const validAssets = assets.filter(a => a.imageData);
   if (validAssets.length === 0) throw new Error("에셋이 준비되지 않았습니다.");
 
-  // 자막 데이터 유무 체크
+  // 자막 데이터 유무 체크 - 각 씬별 자막 데이터 상세 로그
+  const subtitleInfo = validAssets.map((a, i) => ({
+    scene: i + 1,
+    hasSubtitle: a.subtitleData !== null,
+    wordCount: a.subtitleData?.words?.length || 0,
+    chunkCount: a.subtitleData?.meaningChunks?.length || 0,
+    narration: a.narration?.slice(0, 30) + '...'
+  }));
+  console.log('[Video] 자막 데이터 상태:', JSON.stringify(subtitleInfo, null, 2));
+
   const hasSubtitles = enableSubtitles && validAssets.some(a => a.subtitleData !== null);
   console.log(`[Video] 총 ${assets.length}개 씬 중 ${validAssets.length}개 렌더링, 자막: ${enableSubtitles ? (hasSubtitles ? '활성화' : '데이터 없음') : '비활성화'}`);
   if (enableSubtitles) {
@@ -286,16 +340,16 @@ export const generateVideo = async (
       console.warn(`[Video] 씬 ${i + 1}: ${e.message}, 플레이스홀더 사용`);
       // 플레이스홀더 이미지 생성
       const placeholderCanvas = document.createElement('canvas');
-      placeholderCanvas.width = 1280;
-      placeholderCanvas.height = 720;
+      placeholderCanvas.width = canvasWidth;
+      placeholderCanvas.height = canvasHeight;
       const pCtx = placeholderCanvas.getContext('2d');
       if (pCtx) {
         pCtx.fillStyle = '#1a1a2e';
-        pCtx.fillRect(0, 0, 1280, 720);
+        pCtx.fillRect(0, 0, canvasWidth, canvasHeight);
         pCtx.fillStyle = '#fff';
         pCtx.font = 'bold 48px sans-serif';
         pCtx.textAlign = 'center';
-        pCtx.fillText(`씬 ${i + 1}`, 640, 360);
+        pCtx.fillText(`씬 ${i + 1}`, canvasWidth / 2, canvasHeight / 2);
       }
       img.src = placeholderCanvas.toDataURL();
     });
@@ -344,7 +398,7 @@ export const generateVideo = async (
     }
 
     // 자막 청크 미리 계산 (자막 비활성화시 빈 배열)
-    const subtitleChunks = enableSubtitles ? createSubtitleChunks(asset.subtitleData, config) : [];
+    const subtitleChunks = enableSubtitles ? createSubtitleChunks(asset.subtitleData, config, asset.narration, duration) : [];
     if (subtitleChunks.length > 0) {
       console.log(`[Video] 씬 ${i + 1}: ${subtitleChunks.length}개 자막 청크 생성`);
     }
@@ -369,8 +423,8 @@ export const generateVideo = async (
 
   // 2. 캔버스 및 미디어 레코더 설정
   const canvas = document.createElement('canvas');
-  canvas.width = 1280;
-  canvas.height = 720;
+  canvas.width = canvasWidth;
+  canvas.height = canvasHeight;
   const ctx = canvas.getContext('2d', { alpha: false });
   if (!ctx) throw new Error("캔버스 초기화 실패");
 
@@ -386,7 +440,7 @@ export const generateVideo = async (
 
   const recorder = new MediaRecorder(combinedStream, {
     mimeType,
-    videoBitsPerSecond: 12000000 // 12Mbps 초고화질
+    videoBitsPerSecond: videoBitrate
   });
 
   const chunks: Blob[] = [];

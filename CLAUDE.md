@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 프로젝트 개요
 
-**TubeGen AI V9.2** - AI 기반 스토리보드 & 영상 자동 생성 앱
+**AutoGen AI V9.2** - AI 기반 스토리보드 & 영상 자동 생성 앱
 
 주요 기능:
 - 키워드/대본 입력 → AI가 자동으로 스토리보드 생성
@@ -114,9 +114,9 @@ V10.0 "문장→이미지 자동 생성 시스템" 핵심 원칙:
    - STANDARD/MICRO/MACRO: 주어가 사람 ("투자자가 고민", "소비자가 결정")
 
 4. **구도 시스템**:
-   - MICRO (5-15%): 작은 졸라맨 + 큰 사물
-   - STANDARD (30-40%): 졸라맨과 사물 상호작용
-   - MACRO (60-80%): 졸라맨 클로즈업
+   - MICRO (5-15%): 작은 캐릭터 + 큰 사물
+   - STANDARD (30-40%): 캐릭터와 사물 상호작용
+   - MACRO (60-80%): 캐릭터 클로즈업
    - NO_CHAR: 캐릭터 없음 (사물/텍스트만)
 
 5. **한국 금융 색상** - 상승=빨강, 하락=파랑 (미국과 반대)

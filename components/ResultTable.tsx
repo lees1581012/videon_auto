@@ -4,6 +4,7 @@ import { GeneratedAsset } from '../types';
 import { downloadProjectZip } from '../utils/csvHelper';
 import { downloadSrt } from '../services/srtService';
 import { exportAssetsToZip } from '../services/exportService';
+import { VideoFormat } from '../config';
 
 interface ResultTableProps {
   data: GeneratedAsset[];
@@ -13,6 +14,7 @@ interface ResultTableProps {
   onGenerateAnimation?: (index: number) => void;  // 영상 변환 콜백
   isExporting?: boolean;
   animatingIndices?: Set<number>;  // 현재 영상 변환 중인 인덱스들
+  videoFormat?: VideoFormat;  // 영상 포맷 (가로/세로)
 }
 
 // 오디오 디코딩 함수 (컴포넌트 외부로 이동하여 재생성 방지)
@@ -128,11 +130,12 @@ interface TableRowProps {
   row: GeneratedAsset;
   index: number;
   isAnimating: boolean;
+  isPortrait: boolean;  // 세로 모드 여부
   onRegenerateImage?: (index: number) => void;
   onGenerateAnimation?: (index: number) => void;
 }
 
-const TableRow: React.FC<TableRowProps> = memo(({ row, index, isAnimating, onRegenerateImage, onGenerateAnimation }) => {
+const TableRow: React.FC<TableRowProps> = memo(({ row, index, isAnimating, isPortrait, onRegenerateImage, onGenerateAnimation }) => {
   return (
     <tr className="group hover:bg-slate-800/20 transition-colors">
       <td className="py-5 px-6 align-top font-mono text-slate-600 text-[10px]">#{row.sceneNumber.toString().padStart(2, '0')}</td>
@@ -163,7 +166,7 @@ const TableRow: React.FC<TableRowProps> = memo(({ row, index, isAnimating, onReg
         </div>
       </td>
       <td className="py-5 px-6 align-top">
-        <div className="relative aspect-video w-48 mx-auto rounded-xl overflow-hidden bg-slate-950 border border-slate-800 shadow-inner group/img">
+        <div className={`relative mx-auto rounded-xl overflow-hidden bg-slate-950 border border-slate-800 shadow-inner group/img ${isPortrait ? 'aspect-[9/16] w-28' : 'aspect-video w-48'}`}>
           {row.status === 'generating' ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
               <div className="w-5 h-5 border-2 border-brand-500 border-t-transparent animate-spin rounded-full"></div>
@@ -231,8 +234,9 @@ const TableRow: React.FC<TableRowProps> = memo(({ row, index, isAnimating, onReg
 
 TableRow.displayName = 'TableRow';
 
-const ResultTable: React.FC<ResultTableProps> = ({ data, onRegenerateImage, onExportVideo, onGenerateAnimation, isExporting, animatingIndices }) => {
+const ResultTable: React.FC<ResultTableProps> = ({ data, onRegenerateImage, onExportVideo, onGenerateAnimation, isExporting, animatingIndices, videoFormat }) => {
   if (data.length === 0) return null;
+  const isPortrait = videoFormat === 'portrait';
 
   return (
     <div className="w-full max-w-[98%] mx-auto pb-32 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -240,7 +244,7 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onRegenerateImage, onEx
         <div className="flex items-center gap-4">
           <div className="w-1 h-10 bg-brand-500 rounded-full"></div>
           <div>
-            <h2 className="text-xl font-black text-white tracking-tight">졸라맨 V10.0 마스터 스토리보드</h2>
+            <h2 className="text-xl font-black text-white tracking-tight">V10.0 마스터 스토리보드</h2>
             <p className="text-slate-500 text-[9px] font-bold uppercase tracking-widest">Ultra-Detail Identity Sync Active</p>
           </div>
         </div>
@@ -287,6 +291,7 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onRegenerateImage, onEx
                   row={row}
                   index={index}
                   isAnimating={animatingIndices?.has(index) || false}
+                  isPortrait={isPortrait}
                   onRegenerateImage={onRegenerateImage}
                   onGenerateAnimation={onGenerateAnimation}
                 />

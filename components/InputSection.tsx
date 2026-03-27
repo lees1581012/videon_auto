@@ -1,8 +1,9 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { GenerationStep, ProjectSettings, ReferenceImages, DEFAULT_REFERENCE_IMAGES } from '../types';
-import { CONFIG, ELEVENLABS_MODELS, ElevenLabsModelId, IMAGE_MODELS, ImageModelId, GEMINI_STYLE_CATEGORIES, GeminiStyleId, ELEVENLABS_DEFAULT_VOICES, VoiceGender } from '../config';
+import { CONFIG, ELEVENLABS_MODELS, ElevenLabsModelId, IMAGE_MODELS, ImageModelId, GEMINI_STYLE_CATEGORIES, GeminiStyleId, ELEVENLABS_DEFAULT_VOICES, VoiceGender, TtsEngine } from '../config';
 import { getElevenLabsModelId, setElevenLabsModelId, fetchElevenLabsVoices, ElevenLabsVoice } from '../services/elevenLabsService';
+import { EDGE_TTS_VOICES, EdgeTtsVoiceId } from '../services/edgeTtsService';
 
 // Gemini 스타일 맵
 const GEMINI_STYLE_MAP = new Map<string, { id: string; name: string; category: string; prompt: string }>();
@@ -53,6 +54,15 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, step }) => {
   // 성별 필터 상태 (null = 전체)
   const [genderFilter, setGenderFilter] = useState<VoiceGender | null>(null);
 
+  // TTS 엔진 상태
+  const [ttsEngine, setTtsEngine] = useState<TtsEngine>(
+    (localStorage.getItem(CONFIG.STORAGE_KEYS.TTS_ENGINE) as TtsEngine) || 'elevenlabs'
+  );
+  // Edge TTS 음성
+  const [edgeVoiceId, setEdgeVoiceId] = useState<string>(
+    localStorage.getItem(CONFIG.STORAGE_KEYS.EDGE_TTS_VOICE) || 'ko-KR-SunHiNeural'
+  );
+
   // 파일 입력 ref 분리 (캐릭터/스타일)
   const characterFileInputRef = useRef<HTMLInputElement>(null);
   const styleFileInputRef = useRef<HTMLInputElement>(null);
@@ -69,6 +79,12 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, step }) => {
     // Gemini 스타일 설정 로드
     const savedGeminiStyle = localStorage.getItem(CONFIG.STORAGE_KEYS.GEMINI_STYLE) as GeminiStyleId || 'gemini-none';
     const savedGeminiCustomStyle = localStorage.getItem(CONFIG.STORAGE_KEYS.GEMINI_CUSTOM_STYLE) || '';
+
+    // TTS 엔진 설정 로드
+    const savedTtsEngine = localStorage.getItem(CONFIG.STORAGE_KEYS.TTS_ENGINE) as TtsEngine;
+    if (savedTtsEngine) setTtsEngine(savedTtsEngine);
+    const savedEdgeVoice = localStorage.getItem(CONFIG.STORAGE_KEYS.EDGE_TTS_VOICE);
+    if (savedEdgeVoice) setEdgeVoiceId(savedEdgeVoice);
 
     setElVoiceId(savedVoiceId);
     setElModelId(savedModelId);
@@ -423,9 +439,9 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, step }) => {
     <div className="w-full max-w-4xl mx-auto my-8 px-4">
       <div className="text-center mb-10">
         <h1 className="text-4xl md:text-5xl font-black tracking-tight mb-2 text-white">
-          TubeGen <span className="text-brand-500">Studio</span>
+          AutoGen <span className="text-brand-500">Studio</span>
         </h1>
-        <p className="text-slate-400 text-sm font-medium uppercase tracking-widest">졸라맨 V10.0 Concept-Based Engine</p>
+        <p className="text-slate-400 text-sm font-medium uppercase tracking-widest">V10.0 Concept-Based Engine</p>
       </div>
 
       <div className="mb-4 flex flex-col gap-4">
@@ -716,7 +732,9 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, step }) => {
               <div>
                 <h3 className="text-white font-bold text-sm">🎤 나레이션 음성 설정</h3>
                 <p className="text-slate-500 text-xs">
-                  {elApiKey ? `✅ ${getSelectedVoiceInfo().name}` : '⚠️ API Key 미설정 (Gemini TTS 사용)'}
+                  {ttsEngine === 'edge'
+                    ? `🆓 Edge TTS · ${EDGE_TTS_VOICES.find(v => v.id === edgeVoiceId)?.name || 'SunHi'}`
+                    : elApiKey ? `✅ ${getSelectedVoiceInfo().name}` : '⚠️ API Key 미설정 (Gemini TTS 사용)'}
                 </p>
               </div>
             </div>
@@ -727,8 +745,78 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, step }) => {
 
           {showElevenLabsSettings && (
             <div className="mt-4 pt-4 border-t border-slate-800 space-y-4">
-              {/* API Key 상태 표시 (환경변수에서 읽음) */}
-              <div className="p-3 bg-slate-800/50 rounded-xl border border-slate-700">
+
+                {/* TTS 엔진 선택 탭 */}
+                <div className="flex gap-1 p-1 bg-slate-800/50 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => { setTtsEngine('elevenlabs'); localStorage.setItem(CONFIG.STORAGE_KEYS.TTS_ENGINE, 'elevenlabs'); }}
+                    className={`flex-1 px-3 py-2.5 rounded-lg text-xs font-bold transition-all ${
+                      ttsEngine === 'elevenlabs'
+                        ? 'bg-purple-600 text-white shadow-lg'
+                        : 'text-slate-400 hover:bg-slate-700'
+                    }`}
+                  >
+                    🎙️ ElevenLabs (유료)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setTtsEngine('edge'); localStorage.setItem(CONFIG.STORAGE_KEYS.TTS_ENGINE, 'edge'); }}
+                    className={`flex-1 px-3 py-2.5 rounded-lg text-xs font-bold transition-all ${
+                      ttsEngine === 'edge'
+                        ? 'bg-blue-600 text-white shadow-lg'
+                        : 'text-slate-400 hover:bg-slate-700'
+                    }`}
+                  >
+                    🆓 Edge TTS (무료)
+                  </button>
+                </div>
+
+                {/* ===== Edge TTS 설정 (ttsEngine === 'edge'일 때만) ===== */}
+                {ttsEngine === 'edge' && (
+                  <div className="space-y-3">
+                    <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+                      <p className="text-blue-400 text-xs font-bold">🆓 무료 · API 키 불필요</p>
+                      <p className="text-blue-400/60 text-[10px] mt-1">Microsoft Edge 음성 서비스를 사용합니다. 자막 타이밍은 AI가 추정합니다.</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-400 mb-2">음성 선택</label>
+                      <div className="space-y-1 max-h-60 overflow-y-auto">
+                        {EDGE_TTS_VOICES.map((voice) => (
+                          <button
+                            key={voice.id}
+                            type="button"
+                            onClick={() => {
+                              setEdgeVoiceId(voice.id);
+                              localStorage.setItem(CONFIG.STORAGE_KEYS.EDGE_TTS_VOICE, voice.id);
+                            }}
+                            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all ${
+                              edgeVoiceId === voice.id
+                                ? 'bg-blue-600/20 border border-blue-500/30'
+                                : 'bg-slate-800/50 border border-transparent hover:bg-slate-800'
+                            }`}
+                          >
+                            <span className="text-lg">{voice.name.includes('(남성)') || voice.name.includes('(Male)') ? '👨' : '👩'}</span>
+                            <div className="flex-1 min-w-0">
+                              <div className="font-bold text-sm text-white">{voice.name}</div>
+                              <div className="text-[10px] text-slate-500">{voice.lang.startsWith('ko') ? '한국어 음성' : '영어 음성'}</div>
+                            </div>
+                            {edgeVoiceId === voice.id && (
+                              <span className="text-blue-400 text-xs font-bold">✓</span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ===== ElevenLabs 설정 (기존 코드 그대로, ttsEngine !== 'edge'일 때만) ===== */}
+                {ttsEngine !== 'edge' && (
+                  <>
+                    {/* API Key 상태 표시 (환경변수에서 읽음) */}
+                    <div className="p-3 bg-slate-800/50 rounded-xl border border-slate-700">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     {elApiKey ? (
@@ -991,6 +1079,8 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, step }) => {
               >
                 설정 저장
               </button>
+                  </>
+                )}
             </div>
           )}
         </div>

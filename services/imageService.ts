@@ -71,7 +71,8 @@ export function getGeminiStylePrompt(): string {
  */
 export async function generateImage(
   scene: ScriptScene,
-  referenceImages: ReferenceImages
+  referenceImages: ReferenceImages,
+  aspectRatio: '16:9' | '9:16' = '16:9'
 ): Promise<string | null> {
   const modelId = getSelectedImageModel();
   const hasCharacterRef = referenceImages.character && referenceImages.character.length > 0;
@@ -82,5 +83,5 @@ export async function generateImage(
   console.log(`[Image Service] 스타일 참조: ${hasStyleRef ? referenceImages.style.length + '개' : '없음'}`);
 
   // Gemini 사용 (참조 이미지 지원)
-  return await generateWithGemini(scene, referenceImages);
+  return await generateWithGemini(scene, referenceImages, aspectRatio);
 }

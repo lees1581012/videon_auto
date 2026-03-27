@@ -166,4 +166,5 @@ export interface SavedProject {
 
   // 비용 정보 (선택적 - 이전 버전 호환)
   cost?: CostBreakdown;
+  videoFormat?: import('./config').VideoFormat;  // 영상 포맷 (가로/세로)
 }

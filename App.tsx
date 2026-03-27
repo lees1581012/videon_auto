@@ -7,12 +7,13 @@ import { GeneratedAsset, GenerationStep, ScriptScene, CostBreakdown, ReferenceIm
 import { generateScript, generateScriptChunked, findTrendingTopics, generateAudioForScene, generateMotionPrompt } from './services/geminiService';
 import { generateImage, getSelectedImageModel } from './services/imageService';
 import { generateAudioWithElevenLabs } from './services/elevenLabsService';
+import { generateAudioWithEdgeTts } from './services/edgeTtsService';
 import { generateVideo, VideoGenerationResult } from './services/videoService';
 import { downloadSrtFromRecorded } from './services/srtService';
 import { generateVideoFromImage, getFalApiKey } from './services/falService';
 import { saveProject, getSavedProjects, deleteProject, migrateFromLocalStorage } from './services/projectService';
 import { SavedProject } from './types';
-import { CONFIG, PRICING, formatKRW } from './config';
+import { CONFIG, PRICING, formatKRW, VideoFormat, VIDEO_FORMAT_PRESETS, TtsEngine } from './config';
 import ProjectGallery from './components/ProjectGallery';
 import * as FileSaver from 'file-saver';
 
@@ -29,6 +30,15 @@ const App: React.FC = () => {
   // 참조 이미지 상태 (강도 포함)
   const [currentReferenceImages, setCurrentReferenceImages] = useState<ReferenceImages>(DEFAULT_REFERENCE_IMAGES);
   const [needsKey, setNeedsKey] = useState(false);
+
+  // 영상 포맷 상태
+  const [videoFormat, setVideoFormat] = useState<VideoFormat>('landscape');
+
+  // TTS 엔진 상태
+  const [ttsEngine, setTtsEngine] = useState<TtsEngine>(
+    (localStorage.getItem(CONFIG.STORAGE_KEYS.TTS_ENGINE) as TtsEngine) || 'elevenlabs'
+  );
+
   const [animatingIndices, setAnimatingIndices] = useState<Set<number>>(new Set());
 
   // 갤러리 뷰 관련
@@ -124,7 +134,8 @@ const App: React.FC = () => {
   const handleGenerate = useCallback(async (
     topic: string,
     refImgs: ReferenceImages,
-    sourceText: string | null
+    sourceText: string | null,
+    format: VideoFormat = 'landscape'
   ) => {
     if (isProcessingRef.current) return;
     isProcessingRef.current = true;
@@ -144,6 +155,10 @@ const App: React.FC = () => {
       setCurrentReferenceImages(refImgs);
       setCurrentTopic(topic); // 저장용 토픽 기록
       resetCost(); // 비용 초기화
+
+      // 포맷 프리셋 가져오기
+      const preset = VIDEO_FORMAT_PRESETS[format];
+      const aspectRatio = preset.aspectRatio;
 
       // 참조 이미지 존재 여부 계산
       const hasRefImages = (refImgs.character?.length || 0) + (refImgs.style?.length || 0) > 0;
@@ -180,13 +195,21 @@ const App: React.FC = () => {
           hasRefImages,
           sourceText!,
           2500, // 청크당 2500자
-          setProgressMessage // 진행 상황 콜백
+          setProgressMessage, // 진행 상황 콜백
+          format // 포맷 전달
         );
       } else {
         // 일반 대본: 기존 방식
-        scriptScenes = await generateScript(targetTopic, hasRefImages, sourceText);
+        scriptScenes = await generateScript(targetTopic, hasRefImages, sourceText, format);
       }
       if (isAbortedRef.current) return;
+
+      // 숏폼이면 씬 수 제한
+      if (format === 'portrait' && scriptScenes.length > preset.maxScenes) {
+        console.log(`[App] 숏폼 씬 제한: ${scriptScenes.length} → ${preset.maxScenes}개`);
+        scriptScenes = scriptScenes.slice(0, preset.maxScenes);
+        scriptScenes.forEach((s, i) => s.sceneNumber = i + 1);
+      }
       
       const initialAssets = scriptScenes.map(scene => ({
         ...scene, imageData: null, audioData: null, audioDuration: null, subtitleData: null, videoData: null, videoDuration: null, status: 'pending' as const
@@ -196,57 +219,80 @@ const App: React.FC = () => {
       setStep(GenerationStep.ASSETS);
 
       const runAudio = async () => {
-          const TTS_DELAY = 1500; // ElevenLabs API Rate Limit 대응: 1.5초 딜레이
-          const MAX_TTS_RETRIES = 2; // 최대 재시도 횟수
+          const TTS_DELAY = 1500;
+          const MAX_TTS_RETRIES = 2;
+          // localStorage에서 직접 읽어야 최신값을 가져옴
+          const currentTtsEngine = localStorage.getItem(CONFIG.STORAGE_KEYS.TTS_ENGINE) as TtsEngine || 'elevenlabs';
+          const currentEdgeVoice = localStorage.getItem(CONFIG.STORAGE_KEYS.EDGE_TTS_VOICE) || 'ko-KR-SunHiNeural';
+          console.log('🔊 현재 TTS 엔진:', currentTtsEngine);
+          console.log('🔊 Edge TTS 음성:', currentEdgeVoice);
 
           for (let i = 0; i < initialAssets.length; i++) {
               if (isAbortedRef.current) break;
 
-              setProgressMessage(`씬 ${i + 1}/${initialAssets.length} 음성 생성 중...`);
+              const engineLabel = currentTtsEngine === 'edge' ? 'Edge TTS 🆓' : 'ElevenLabs';
+              setProgressMessage(`씬 ${i + 1}/${initialAssets.length} 음성 생성 중... (${engineLabel})`);
               let success = false;
 
-              // 재시도 로직
               for (let attempt = 0; attempt <= MAX_TTS_RETRIES && !success; attempt++) {
                   if (isAbortedRef.current) break;
 
                   try {
                       if (attempt > 0) {
                           console.log(`[TTS] 씬 ${i + 1} 재시도 중... (${attempt}/${MAX_TTS_RETRIES})`);
-                          await wait(3000); // 재시도 시 3초 대기
+                          await wait(3000);
                       }
 
-                      // ElevenLabs에서 오디오 + 자막 타임스탬프 동시 획득
-                      const elResult = await generateAudioWithElevenLabs(
-                        assetsRef.current[i].narration
-                      );
-                      if (isAbortedRef.current) break;
+                      if (currentTtsEngine === 'edge') {
+                          // ===== Edge TTS (무료) =====
+                          const edgeResult = await generateAudioWithEdgeTts(
+                            assetsRef.current[i].narration,
+                            currentEdgeVoice as any
+                          );
+                          if (isAbortedRef.current) break;
 
-                      if (elResult.audioData) {
-                        // ElevenLabs 성공: 오디오 + 자막 + 길이 데이터 저장
-                        updateAssetAt(i, {
-                          audioData: elResult.audioData,
-                          subtitleData: elResult.subtitleData,
-                          audioDuration: elResult.estimatedDuration
-                        });
-                        // TTS 비용 추가
-                        const charCount = assetsRef.current[i].narration.length;
-                        addCost('tts', charCount * PRICING.TTS.perCharacter, charCount);
-                        success = true;
-                        console.log(`[TTS] 씬 ${i + 1} 음성 생성 완료`);
+                          if (edgeResult.audioData) {
+                            updateAssetAt(i, {
+                              audioData: edgeResult.audioData,
+                              subtitleData: edgeResult.subtitleData,
+                              audioDuration: edgeResult.audioDuration,
+                            });
+                            addCost('tts', 0, assetsRef.current[i].narration.length);
+                            success = true;
+                            console.log(`[TTS] 씬 ${i + 1} Edge TTS 완료`);
+                          } else {
+                            throw new Error('Edge TTS 응답 없음');
+                          }
                       } else {
-                        throw new Error('ElevenLabs 응답 없음');
+                          // ===== ElevenLabs (유료, 기존 그대로) =====
+                          const elResult = await generateAudioWithElevenLabs(
+                            assetsRef.current[i].narration
+                          );
+                          if (isAbortedRef.current) break;
+
+                          if (elResult.audioData) {
+                            updateAssetAt(i, {
+                              audioData: elResult.audioData,
+                              subtitleData: elResult.subtitleData,
+                              audioDuration: elResult.estimatedDuration,
+                            });
+                            const charCount = assetsRef.current[i].narration.length;
+                            addCost('tts', charCount * PRICING.TTS.perCharacter, charCount);
+                            success = true;
+                            console.log(`[TTS] 씬 ${i + 1} ElevenLabs 완료`);
+                          } else {
+                            throw new Error('ElevenLabs 응답 없음');
+                          }
                       }
                   } catch (e: any) {
                       console.error(`[TTS] 씬 ${i + 1} 실패 (시도 ${attempt + 1}):`, e.message);
-
-                      // Rate Limit 에러인 경우 더 긴 대기
                       if (e.message?.includes('429') || e.message?.includes('rate')) {
-                          await wait(5000); // 5초 대기 후 재시도
+                          await wait(5000);
                       }
                   }
               }
 
-              // 모든 재시도 실패 시 Gemini 폴백
+              // 모든 재시도 실패 시 Gemini 폴백 (엔진 불문)
               if (!success && !isAbortedRef.current) {
                   try {
                       console.log(`[TTS] 씬 ${i + 1} Gemini 폴백 시도...`);
@@ -257,9 +303,8 @@ const App: React.FC = () => {
                   }
               }
 
-              // 다음 씬 전에 딜레이 (Rate Limit 방지)
               if (i < initialAssets.length - 1 && !isAbortedRef.current) {
-                  await wait(TTS_DELAY);
+                  await wait(currentTtsEngine === 'edge' ? 500 : TTS_DELAY);
               }
           }
       };
@@ -287,7 +332,7 @@ const App: React.FC = () => {
                       }
 
                       // Scene 객체 전체를 넘겨서 prompts.ts가 분석 정보를 활용하도록 함
-                      const img = await generateImage(assetsRef.current[i], refImgs);
+                      const img = await generateImage(assetsRef.current[i], refImgs, aspectRatio);
                       if (isAbortedRef.current) break;
 
                       if (img) {
@@ -402,7 +447,7 @@ const App: React.FC = () => {
     } finally {
       isProcessingRef.current = false;
     }
-  }, [checkApiKeyStatus, refreshProjects]);
+  }, [checkApiKeyStatus, refreshProjects, ttsEngine]);
 
   // 이미지 재생성 핸들러 (useCallback으로 메모이제이션)
   const handleRegenerateImage = useCallback(async (idx: number) => {
@@ -423,7 +468,7 @@ const App: React.FC = () => {
           await wait(2000);
         }
 
-        const img = await generateImage(assetsRef.current[idx], currentReferenceImages);
+        const img = await generateImage(assetsRef.current[idx], currentReferenceImages, VIDEO_FORMAT_PRESETS[videoFormat].aspectRatio);
 
         if (img && !isAbortedRef.current) {
           updateAssetAt(idx, { imageData: img, status: 'completed' });
@@ -507,7 +552,7 @@ const App: React.FC = () => {
     }
   }, [animatingIndices]);
 
-  const triggerVideoExport = async (enableSubtitles: boolean = true) => {
+  const triggerVideoExport = async (enableSubtitles: boolean = true, fmt?: VideoFormat) => {
     if (isVideoGenerating) return;
     try {
       setIsVideoGenerating(true);
@@ -518,12 +563,12 @@ const App: React.FC = () => {
         assetsRef.current,
         (msg) => setProgressMessage(`[Render] ${msg}`),
         isAbortedRef,
-        { enableSubtitles }
+        { enableSubtitles, videoFormat: fmt || videoFormat }
       );
 
       if (result) {
         // 영상 저장 (자막은 영상에 하드코딩됨)
-        saveAs(result.videoBlob, `tubegen_v92_${suffix}_${timestamp}.mp4`);
+        saveAs(result.videoBlob, `autogen_v92_${suffix}_${timestamp}.mp4`);
         setProgressMessage(`✨ MP4 렌더링 완료! (${enableSubtitles ? '자막 O' : '자막 X'})`);
       }
     } catch (error: any) {
@@ -612,7 +657,67 @@ const App: React.FC = () => {
       {/* 메인 뷰 */}
       {viewMode === 'main' && (
       <main className="py-8">
-        <InputSection onGenerate={handleGenerate} step={step} />
+        {/* 영상 포맷 선택 */}
+        <div className="max-w-4xl mx-auto px-4 mb-4">
+          <div className="flex items-center justify-center gap-2 p-3 bg-slate-900/50 border border-slate-800 rounded-2xl">
+            <span className="text-xs font-bold text-slate-400 mr-2">영상 포맷:</span>
+            <button
+              onClick={() => setVideoFormat('landscape')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                videoFormat === 'landscape'
+                  ? 'bg-brand-600 text-white shadow-lg shadow-brand-600/30'
+                  : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+              }`}
+            >
+              📺 가로 16:9
+            </button>
+            <button
+              onClick={() => setVideoFormat('portrait')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                videoFormat === 'portrait'
+                  ? 'bg-pink-600 text-white shadow-lg shadow-pink-600/30'
+                  : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+              }`}
+            >
+              📱 세로 9:16
+            </button>
+            <span className="text-[10px] text-slate-500 ml-2">
+              {videoFormat === 'portrait' ? 'Shorts / Reels / TikTok' : 'YouTube 롱폼'}
+            </span>
+          </div>
+        </div>
+
+        {/* TTS 엔진 선택 */}
+        <div className="max-w-4xl mx-auto px-4 mb-4">
+          <div className="flex items-center justify-center gap-2 p-3 bg-slate-900/50 border border-slate-800 rounded-2xl">
+            <span className="text-xs font-bold text-slate-400 mr-2">음성 엔진:</span>
+            <button
+              onClick={() => { setTtsEngine('elevenlabs'); localStorage.setItem(CONFIG.STORAGE_KEYS.TTS_ENGINE, 'elevenlabs'); }}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                ttsEngine === 'elevenlabs'
+                  ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30'
+                  : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+              }`}
+            >
+              🎙️ ElevenLabs
+            </button>
+            <button
+              onClick={() => { setTtsEngine('edge'); localStorage.setItem(CONFIG.STORAGE_KEYS.TTS_ENGINE, 'edge'); }}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                ttsEngine === 'edge'
+                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
+                  : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+              }`}
+            >
+              🆓 Edge TTS
+            </button>
+            <span className="text-[10px] text-slate-500 ml-2">
+              {ttsEngine === 'edge' ? '무료 · API키 불필요 · 자막 타이밍 추정' : '유료 · 고품질 · 정확한 자막 타이밍'}
+            </span>
+          </div>
+        </div>
+
+        <InputSection onGenerate={(topic, refImgs, sourceText) => handleGenerate(topic, refImgs, sourceText, videoFormat)} step={step} />
         
         {step !== GenerationStep.IDLE && (
           <div className="max-w-7xl mx-auto px-4 text-center mb-12">
@@ -635,6 +740,7 @@ const App: React.FC = () => {
             isExporting={isVideoGenerating}
             animatingIndices={animatingIndices}
             onGenerateAnimation={handleGenerateAnimation}
+            videoFormat={videoFormat}
         />
       </main>
       )}
