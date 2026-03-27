@@ -3,7 +3,9 @@
  * 4단계: 이미지 생성
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { generateImage, getSelectedImageModel, getSelectedImageStyle } from '../../services/imageService';
+import { CONFIG } from '../../config';
 import type { ScriptScene } from '../../types';
 
 export interface Step4ImageProps {
@@ -17,41 +19,112 @@ export const Step4Image: React.FC<Step4ImageProps> = ({ scenes, onNext, onPrev }
   const [generatedImages, setGeneratedImages] = useState<{ sceneIndex: number; imageData: string }[]>([]);
   const [progress, setProgress] = useState({ completed: 0, failed: 0, pending: scenes.length });
 
+  // 영상 비율 및 스타일 로드
+  const [aspectRatio, setAspectRatio] = useState('16:9');
+  const [characterConfig, setCharacterConfig] = useState<{ type: string; referenceImages: string[] }>({ type: 'none', referenceImages: [] });
+
+  useEffect(() => {
+    const format = localStorage.getItem(CONFIG.STORAGE_KEYS.VIDEO_FORMAT);
+    const formatData = format ? JSON.parse(format) : null;
+    if (formatData?.aspectRatio) {
+      setAspectRatio(formatData.aspectRatio);
+    }
+
+    const charConfig = localStorage.getItem(CONFIG.STORAGE_KEYS.CHARACTER_CONFIG);
+    if (charConfig) {
+      try {
+        setCharacterConfig(JSON.parse(charConfig));
+      } catch (e) {
+        // ignore
+      }
+    }
+  }, []);
+
   const handleGenerateAll = async () => {
     setIsGenerating(true);
     setProgress({ completed: 0, failed: 0, pending: scenes.length });
 
     try {
-      // TODO: 이미지 생성 로직 구현
-      // 임시로 순차적 처리 시뮬레이션
+      const results: { sceneIndex: number; imageData: string }[] = [];
+      const referenceImages = characterConfig?.referenceImages || [];
+
       for (let i = 0; i < scenes.length; i++) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        setProgress(prev => ({
-          completed: prev.completed + 1,
-          failed: prev.failed,
-          pending: prev.pending - 1
-        }));
+        try {
+          const scene = scenes[i];
+          const imageData = await generateImage(scene, referenceImages, aspectRatio);
+
+          if (imageData) {
+            results.push({ sceneIndex: i, imageData });
+            setProgress(prev => ({
+              completed: prev.completed + 1,
+              failed: prev.failed,
+              pending: prev.pending - 1
+            }));
+          } else {
+            throw new Error('이미지 데이터 없음');
+          }
+        } catch (error) {
+          console.error(`씬 ${i + 1} 이미지 생성 실패:`, error);
+          setProgress(prev => ({
+            completed: prev.completed,
+            failed: prev.failed + 1,
+            pending: prev.pending - 1
+          }));
+        }
       }
 
-      // 더미 데이터
-      const dummyImages = scenes.map((_, index) => ({
-        sceneIndex: index,
-        imageData: 'dummy_image_data'
-      }));
-      setGeneratedImages(dummyImages);
+      setGeneratedImages(results);
+
+      if (results.length === 0) {
+        alert('이미지 생성에 실패했습니다. API 키를 확인해주세요.');
+      }
     } catch (error) {
       console.error('이미지 생성 실패:', error);
+      alert('이미지 생성에 실패했습니다. API 키를 확인해주세요.');
     } finally {
       setIsGenerating(false);
     }
   };
 
   const handleRegenerate = async (sceneIndex: number) => {
-    // TODO: 단일 이미지 재생성
+    try {
+      const scene = scenes[sceneIndex];
+      const referenceImages = characterConfig?.referenceImages || [];
+      const imageData = await generateImage(scene, referenceImages, aspectRatio);
+
+      if (imageData) {
+        setGeneratedImages(prev => {
+          const filtered = prev.filter(i => i.sceneIndex !== sceneIndex);
+          return [...filtered, { sceneIndex, imageData }];
+        });
+      } else {
+        alert('이미지 생성에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('이미지 재생성 실패:', error);
+      alert('이미지 재생성에 실패했습니다.');
+    }
   };
 
   const handleImageUpload = (sceneIndex: number) => {
-    // TODO: 이미지 업로드
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const imageData = e.target?.result as string;
+          setGeneratedImages(prev => {
+            const filtered = prev.filter(i => i.sceneIndex !== sceneIndex);
+            return [...filtered, { sceneIndex, imageData }];
+          });
+        };
+        reader.readAsDataURL(file);
+      }
+    };
+    input.click();
   };
 
   const handleNext = () => {
@@ -101,9 +174,11 @@ export const Step4Image: React.FC<Step4ImageProps> = ({ scenes, onNext, onPrev }
 
               {/* 이미지 또는 상태 표시 */}
               {isGenerated ? (
-                <div className="w-full h-full flex items-center justify-center bg-green-500/20">
-                  <span className="text-green-400 text-lg">✓ 생성 완료</span>
-                </div>
+                <img
+                  src={imageData?.imageData}
+                  alt={`Scene ${scene.sceneNumber}`}
+                  className="w-full h-full object-cover"
+                />
               ) : isProcessing ? (
                 <div className="w-full h-full flex items-center justify-center">
                   <div className="w-8 h-8 border-2 border-orange-500/30 border-t-orange-500 rounded-full animate-spin" />

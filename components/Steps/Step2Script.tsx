@@ -4,6 +4,7 @@
  */
 
 import React, { useState } from 'react';
+import { generateScript } from '../../services/geminiService';
 import type { ScriptScene } from '../../types';
 
 export interface Step2ScriptProps {
@@ -18,21 +19,32 @@ export const Step2Script: React.FC<Step2ScriptProps> = ({ onNext, onPrev }) => {
   const [scenes, setScenes] = useState<ScriptScene[]>([]);
 
   const handleSplitScript = async () => {
-    if (!script.trim()) return;
+    if (!script.trim() && !projectName.trim()) return;
 
     setIsSplitting(true);
     try {
-      // TODO: Gemini API로 씬 분할 요청
-      // 임시로 단순 분할 구현
-      const paragraphs = script.split(/\n\n+/).filter(Boolean);
-      const splitScenes: ScriptScene[] = paragraphs.map((narration, index) => ({
-        sceneNumber: index + 1,
-        narration: narration.trim(),
-        visualPrompt: '', // 나중에 생성
-      }));
-      setScenes(splitScenes);
+      let generatedScenes: ScriptScene[];
+
+      // 스크립트가 있으면 문단 분할, 없으면 토픽으로 생성
+      if (script.trim()) {
+        // 기존 스크립트를 문단 단위로 분할
+        const paragraphs = script.split(/\n\n+/).filter(Boolean);
+        generatedScenes = paragraphs.map((narration, index) => ({
+          sceneNumber: index + 1,
+          narration: narration.trim(),
+          visualPrompt: '',
+        }));
+      } else if (projectName.trim()) {
+        // 토픽으로 AI 생성
+        generatedScenes = await generateScript(projectName, false, null, 'landscape');
+      } else {
+        return;
+      }
+
+      setScenes(generatedScenes);
     } catch (error) {
-      console.error('씬 분할 실패:', error);
+      console.error('씬 생성 실패:', error);
+      alert('스크립트 생성에 실패했습니다. API 키를 확인해주세요.');
     } finally {
       setIsSplitting(false);
     }
@@ -78,7 +90,7 @@ export const Step2Script: React.FC<Step2ScriptProps> = ({ onNext, onPrev }) => {
   };
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full relative">
       {/* 좌측: 대본 입력 영역 */}
       <div className="w-1/2 max-w-xl p-6 border-r border-gray-800">
         <h1 className="text-2xl font-bold mb-6">대본을 입력하세요</h1>
@@ -177,7 +189,7 @@ export const Step2Script: React.FC<Step2ScriptProps> = ({ onNext, onPrev }) => {
       </div>
 
       {/* 하단 버튼 */}
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-3">
+      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 flex gap-3">
         <button
           onClick={onPrev}
           className="px-6 py-3 bg-gray-800 hover:bg-gray-700 text-white rounded-lg transition-colors"

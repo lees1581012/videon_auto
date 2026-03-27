@@ -5,6 +5,9 @@
 
 import React, { useState } from 'react';
 import { GEMINI_TTS_VOICES, ELEVENLABS_MODELS } from '../../config';
+import { generateAudioWithGeminiTts, createGeminiTtsSubtitles } from '../../services/geminiTtsService';
+import { generateAudioWithElevenLabs } from '../../services/elevenLabsService';
+import { generateAudioWithEdgeTts } from '../../services/edgeTtsService';
 import type { TtsEngine, ScriptScene, SubtitleData } from '../../types';
 
 export interface Step3VoiceProps {
@@ -25,17 +28,59 @@ export const Step3Voice: React.FC<Step3VoiceProps> = ({ scenes, onNext, onPrev }
   const handleGenerate = async () => {
     setIsGenerating(true);
     try {
-      // TODO: TTS 생성 로직 구현
-      // 임시 더미 데이터
-      const dummyAudios = scenes.map((scene, index) => ({
-        sceneIndex: index,
-        audioData: 'dummy_audio_data',
-        duration: 5,
-        subtitles: { words: [], fullText: scene.narration }
-      }));
-      setGeneratedAudios(dummyAudios);
+      const audioResults: { sceneIndex: number; audioData: string; duration: number; subtitles: SubtitleData }[] = [];
+
+      for (let i = 0; i < scenes.length; i++) {
+        const scene = scenes[i];
+        try {
+          let result;
+
+          if (ttsEngine === 'gemini') {
+            const geminiResult = await generateAudioWithGeminiTts(scene.narration, selectedVoice);
+            // Gemini TTS는 자막 싱크를 지원하지 않으므로 별도 생성
+            const subtitles = await createGeminiTtsSubtitles(scene.narration, geminiResult.audioDuration);
+            result = {
+              audioData: geminiResult.audioData,
+              duration: geminiResult.audioDuration,
+              subtitles: subtitles || { words: [], fullText: scene.narration }
+            };
+          } else if (ttsEngine === 'elevenlabs') {
+            const elevenResult = await generateAudioWithElevenLabs(scene.narration);
+            result = {
+              audioData: elevenResult.audioData,
+              duration: elevenResult.audioDuration,
+              subtitles: elevenResult.subtitleData || { words: [], fullText: scene.narration }
+            };
+          } else {
+            // Edge TTS
+            const edgeResult = await generateAudioWithEdgeTts(scene.narration, 'ko-KR-SunHiNeural');
+            result = {
+              audioData: edgeResult.audioData,
+              duration: edgeResult.audioDuration,
+              subtitles: { words: [], fullText: scene.narration }
+            };
+          }
+
+          audioResults.push({
+            sceneIndex: i,
+            ...result
+          });
+        } catch (error) {
+          console.error(`씬 ${i + 1} 음성 생성 실패:`, error);
+          // 실패 시 더미 데이터 추가 (실제로는 에러 표시 필요)
+          audioResults.push({
+            sceneIndex: i,
+            audioData: '',
+            duration: 5,
+            subtitles: { words: [], fullText: scene.narration }
+          });
+        }
+      }
+
+      setGeneratedAudios(audioResults);
     } catch (error) {
       console.error('음성 생성 실패:', error);
+      alert('음성 생성에 실패했습니다. API 키를 확인해주세요.');
     } finally {
       setIsGenerating(false);
     }
@@ -51,7 +96,7 @@ export const Step3Voice: React.FC<Step3VoiceProps> = ({ scenes, onNext, onPrev }
   const estimatedCredits = totalCharacters * (selectedModelData?.pricePerChar || 1) / 1000;
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full relative">
       {/* 좌측: 스크립트 목록 */}
       <div className="w-1/3 p-6 border-r border-gray-800 overflow-auto">
         <h2 className="text-lg font-semibold mb-4">스크립트 ({scenes.length}개 씬)</h2>
@@ -168,7 +213,7 @@ export const Step3Voice: React.FC<Step3VoiceProps> = ({ scenes, onNext, onPrev }
       </div>
 
       {/* 하단 버튼 */}
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-3">
+      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 flex gap-3">
         <button
           onClick={onPrev}
           className="px-6 py-3 bg-gray-800 hover:bg-gray-700 text-white rounded-lg transition-colors"

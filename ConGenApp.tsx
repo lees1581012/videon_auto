@@ -13,7 +13,7 @@ import { Step4Image } from './components/Steps/Step4Image';
 import { Step5VideoCompose } from './components/Steps/Step5VideoCompose';
 import { Step6Complete } from './components/Steps/Step6Complete';
 import { ApiKeyManager } from './components/Settings/ApiKeyManager';
-import { ProjectGallery } from './components/ProjectGallery';
+import { ConGenProjectGallery } from './components/ConGenProjectGallery';
 import { AppStep, ScriptScene, SubtitleData, VideoEffectSettings } from './types';
 import { CONFIG } from './config';
 import { generateScript } from './services/geminiService';
@@ -104,20 +104,36 @@ const ConGenApp: React.FC = () => {
     setIsRendering(true);
 
     try {
-      // TODO: 영상 조립 및 렌더링
-      // 임시로 3초 대기 후 완료 처리
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      // 영상 데이터 준비
+      const scenesWithAssets = scenes.map((scene, index) => {
+        const audio = audioData.find(a => a.sceneIndex === index);
+        const image = imageData.find(i => i.sceneIndex === index);
+        return {
+          ...scene,
+          audioUrl: audio?.audioData || '',
+          duration: audio?.duration || 5,
+          imageUrl: image?.imageData || '',
+        };
+      });
 
-      // 더미 비디오 URL 생성 (실제로는 generateVideo 호출 필요)
-      setVideoUrl('dummy_video_url');
+      // 영상 생성 서비스 호출
+      const result = await generateVideo(scenesWithAssets, audioData, imageData, effects);
+
+      if (result.videoUrl) {
+        setVideoUrl(result.videoUrl);
+        if (result.subtitles) {
+          setFinalSubtitles(result.subtitles);
+        }
+      }
 
       handleStepComplete(AppStep.VIDEO_COMPOSE);
     } catch (error) {
       console.error('영상 생성 실패:', error);
+      alert('영상 생성에 실패했습니다: ' + (error as Error).message);
     } finally {
       setIsRendering(false);
     }
-  }, [handleStepComplete]);
+  }, [handleStepComplete, scenes, audioData, imageData]);
 
   // 새 프로젝트 시작
   const handleNewProject = useCallback(() => {
@@ -146,7 +162,7 @@ const ConGenApp: React.FC = () => {
     }
 
     if (viewMode === 'projects') {
-      return <ProjectGallery onClose={() => setViewMode('create')} />;
+      return <ConGenProjectGallery onClose={() => setViewMode('create')} />;
     }
 
     // create 또는 home 모드
