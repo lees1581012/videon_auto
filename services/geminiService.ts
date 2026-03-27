@@ -2,7 +2,8 @@
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { ScriptScene, ReferenceImages } from "../types";
 import { SYSTEM_INSTRUCTIONS, getTrendSearchPrompt, getScriptGenerationPrompt, getFinalVisualPrompt } from "./prompts";
-import { CONFIG, GEMINI_STYLE_CATEGORIES, GeminiStyleId } from "../config";
+import { CONFIG } from "../config";
+import { IMAGE_STYLES } from "../config";
 
 /**
  * Gemini API 클라이언트 초기화
@@ -472,28 +473,15 @@ export const generateScriptChunked = async (
 
 /**
  * 선택된 Gemini 화풍 프롬프트 가져오기
- * - 순환 의존성 방지를 위해 직접 localStorage와 config 사용
+ * - ConGen IMAGE_STYLES 시스템 사용
  */
 const getSelectedGeminiStylePrompt = (): string => {
-  const styleId = localStorage.getItem(CONFIG.STORAGE_KEYS.GEMINI_STYLE) as GeminiStyleId || 'gemini-none';
+  const styleId = localStorage.getItem(CONFIG.STORAGE_KEYS.IMAGE_STYLE) as string || 'default';
 
-  // 화풍 없음 선택
-  if (styleId === 'gemini-none') {
-    return '';
-  }
-
-  // 커스텀 스타일인 경우
-  if (styleId === 'gemini-custom') {
-    const customPrompt = localStorage.getItem(CONFIG.STORAGE_KEYS.GEMINI_CUSTOM_STYLE) || '';
-    return customPrompt.trim();
-  }
-
-  // 프리셋 스타일 찾기
-  for (const category of GEMINI_STYLE_CATEGORIES) {
-    const style = category.styles.find(s => s.id === styleId);
-    if (style) {
-      return style.prompt;
-    }
+  // IMAGE_STYLES에서 스타일 찾기
+  const style = IMAGE_STYLES.find(s => s.id === styleId);
+  if (style) {
+    return style.promptSuffix;
   }
 
   return '';

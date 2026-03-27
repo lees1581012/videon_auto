@@ -5,7 +5,7 @@
  * - 참조 이미지 지원 (캐릭터/스타일 분리)
  */
 
-import { CONFIG, ImageModelId, GEMINI_STYLE_CATEGORIES, GeminiStyleId } from '../config';
+import { CONFIG, ImageModelId, IMAGE_STYLES, ImageStyleId } from '../config';
 import { generateImageForScene as generateWithGemini } from './geminiService';
 import { ScriptScene, ReferenceImages } from '../types';
 
@@ -18,11 +18,11 @@ export function getSelectedImageModel(): ImageModelId {
 }
 
 /**
- * 현재 선택된 Gemini 스타일 가져오기
+ * 현재 선택된 이미지 스타일 가져오기 (ConGen)
  */
-export function getSelectedGeminiStyle(): GeminiStyleId {
-  const saved = localStorage.getItem(CONFIG.STORAGE_KEYS.GEMINI_STYLE);
-  return (saved as GeminiStyleId) || 'gemini-none';
+export function getSelectedImageStyle(): ImageStyleId {
+  const saved = localStorage.getItem(CONFIG.STORAGE_KEYS.IMAGE_STYLE);
+  return (saved as ImageStyleId) || CONFIG.DEFAULT_STYLE;
 }
 
 /**
@@ -33,31 +33,13 @@ function getGeminiCustomStylePrompt(): string {
 }
 
 /**
- * 선택된 Gemini 화풍의 프롬프트 가져오기
- * @returns 화풍 프롬프트 (없음이면 빈 문자열)
+ * 선택된 이미지 스타일의 프롬프트 가져오기
+ * @returns 스타일 프롬프트
  */
-export function getGeminiStylePrompt(): string {
-  const styleId = getSelectedGeminiStyle();
-
-  // 화풍 없음 선택
-  if (styleId === 'gemini-none') {
-    return '';
-  }
-
-  // 커스텀 스타일인 경우
-  if (styleId === 'gemini-custom') {
-    return getGeminiCustomStylePrompt().trim();
-  }
-
-  // 프리셋 스타일 찾기
-  for (const category of GEMINI_STYLE_CATEGORIES) {
-    const style = category.styles.find(s => s.id === styleId);
-    if (style) {
-      return style.prompt;
-    }
-  }
-
-  return '';
+export function getImageStylePrompt(): string {
+  const styleId = getSelectedImageStyle();
+  const style = IMAGE_STYLES.find(s => s.id === styleId);
+  return style ? style.promptSuffix : '';
 }
 
 /**

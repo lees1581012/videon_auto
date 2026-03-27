@@ -1,3 +1,94 @@
+// ===== ConGen 6단계 위저드 타입 =====
+
+// 6단계 스텝 정의
+export enum AppStep {
+  SETTINGS = 1,      // 설정 (카테고리, 이미지모델, 비율, 스타일, 캐릭터)
+  SCRIPT = 2,        // 대본생성
+  VOICE = 3,         // 음성생성
+  IMAGE = 4,         // 이미지생성
+  VIDEO_COMPOSE = 5, // 영상생성 (영상 효과 설정 + 조립)
+  COMPLETE = 6       // 영상렌더링 (완성 + MP4 다운로드 + SRT)
+}
+
+// 콘텐츠 카테고리
+export type ContentCategory = 'general' | 'economy' | 'travel' | 'dark_psychology' | 'history' | 'prehistoric';
+
+export interface ContentCategoryInfo {
+  id: ContentCategory;
+  name: string;           // 한국어 이름
+  subLabel: string;       // 부가 설명 (예: 주식/금융/부동산)
+  icon: string;           // 아이콘 문자열
+  toneDescription: string; // 영상 톤/무드 설명
+  sceneComposition: string; // 장면 구성 규칙
+  colorPalette: string;   // 색감 팔레트 설명
+  moodTransition: string; // 분위기 전환 규칙
+}
+
+// 이미지 스타일 (17가지)
+export type ImageStyleId = 'default' | 'webtoon' | 'ghibli' | 'watercolor' | 'cinematic' | 'animation' | 'minimal' | '3d_cartoon' | 'pixel_art' | 'vintage' | 'sketch' | 'realistic' | 'chibi' | 'storybook' | 'editorial' | 'emotional_animation' | 'infographic';
+
+export interface ImageStyleInfo {
+  id: ImageStyleId;
+  name: string;          // 한국어 이름
+  subLabel: string;      // 부가 설명
+  promptSuffix: string;  // 프롬프트에 추가할 스타일 설명 (영어)
+  previewColors: string[]; // 미리보기용 그라데이션 색상 2개
+}
+
+// 이미지 생성 모델 (Fal.ai 기반)
+export type ImageModelId = 'nano-banana' | 'nano-banana-2' | 'nano-banana-pro' | 'z-image-lora' | 'gemini-2.5-flash-image';
+
+export interface ImageModelInfo {
+  id: ImageModelId;
+  name: string;
+  description: string;
+  speed: string;
+  pricePerImage: number;  // 크레딧 또는 USD
+  recommended?: boolean;
+  provider: 'google' | 'fal';
+}
+
+// 캐릭터 설정
+export type CharacterType = 'none' | 'sua' | 'custom';
+
+export interface CharacterConfig {
+  type: CharacterType;
+  name?: string;          // 캐릭터 이름 (커스텀일 때)
+  description?: string;   // 캐릭터 설명 (커스텀일 때)
+  referenceImages: string[]; // 참조 이미지 (최대 4장)
+  customStylePrompt?: string; // 커스텀 스타일 지시문
+}
+
+// 프리셋 캐릭터 '수아'
+export const PRESET_CHARACTER_SUA: CharacterConfig = {
+  type: 'sua',
+  name: '수아',
+  description: '밝고 귀여운 여자 주인공',
+  referenceImages: [],
+  customStylePrompt: 'A bright and cute Korean female character named Sua with a warm smile, modern casual style'
+};
+
+// TTS 엔진 타입
+export type TtsEngine = 'gemini' | 'elevenlabs' | 'edge';
+
+// Gemini TTS 음성
+export interface GeminiVoice {
+  name: string;       // 예: 'Kore'
+  style: string;      // 예: 'Firm'
+  language: string;   // 예: 'ko'
+}
+
+// 영상 효과 설정
+export interface VideoEffectSettings {
+  transition: 'none' | 'fade' | 'crossfade' | 'slide_left' | 'slide_right';
+  subtitleBurnIn: boolean;       // 자막 번인
+  vignetting: boolean;           // 비네팅 (화면 가장자리 어둡게)
+  fadeInOut: boolean;            // 페이드 인/아웃
+  blurIntro: boolean;            // 블러 인트로
+  slowZoom: number;              // 서서히 확대 비율 (0=끄기, 105=5%, 110=10%, 115=15%)
+}
+
+// ===== 기존 타입 유지 =====
 
 // 참조 이미지 타입 (캐릭터/스타일 분리 + 강도 조절)
 export interface ReferenceImages {
@@ -52,6 +143,7 @@ export interface SceneAnalysis {
   motion_detail: string; // 동작디테일
 }
 
+// 분할된 씬 타입
 export interface ScriptScene {
   sceneNumber: number;
   narration: string;
@@ -101,6 +193,7 @@ export const DEFAULT_SUBTITLE_CONFIG: SubtitleConfig = {
   textColor: '#FFFFFF'
 };
 
+// GeneratedAsset - 카테고리/스타일 추가
 export interface GeneratedAsset extends ScriptScene {
   imageData: string | null;
   audioData: string | null;
@@ -109,6 +202,8 @@ export interface GeneratedAsset extends ScriptScene {
   videoData: string | null;      // 애니메이션 영상 URL (앞 N개 씬만)
   videoDuration: number | null;  // 영상 길이 (초) - 보통 4~5초 고정
   status: 'pending' | 'generating' | 'completed' | 'error';
+  categoryId?: ContentCategory;  // ConGen 추가
+  styleId?: ImageStyleId;        // ConGen 추가
 }
 
 export enum GenerationStep {

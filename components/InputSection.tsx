@@ -1,16 +1,14 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { GenerationStep, ProjectSettings, ReferenceImages, DEFAULT_REFERENCE_IMAGES } from '../types';
-import { CONFIG, ELEVENLABS_MODELS, ElevenLabsModelId, IMAGE_MODELS, ImageModelId, GEMINI_STYLE_CATEGORIES, GeminiStyleId, ELEVENLABS_DEFAULT_VOICES, VoiceGender, TtsEngine } from '../config';
+import { CONFIG, ELEVENLABS_MODELS, ElevenLabsModelId, IMAGE_MODELS, ImageModelId, IMAGE_STYLES, ImageStyleId, ELEVENLABS_DEFAULT_VOICES, VoiceGender, TtsEngine } from '../config';
 import { getElevenLabsModelId, setElevenLabsModelId, fetchElevenLabsVoices, ElevenLabsVoice } from '../services/elevenLabsService';
 import { EDGE_TTS_VOICES, EdgeTtsVoiceId } from '../services/edgeTtsService';
 
-// Gemini 스타일 맵
-const GEMINI_STYLE_MAP = new Map<string, { id: string; name: string; category: string; prompt: string }>();
-GEMINI_STYLE_CATEGORIES.forEach(category => {
-  category.styles.forEach(style => {
-    GEMINI_STYLE_MAP.set(style.id, { ...style, category: category.name });
-  });
+// 이미지 스타일 맵 (ConGen)
+const IMAGE_STYLE_MAP = new Map<string, { id: string; name: string; category: string; prompt: string }>();
+IMAGE_STYLES.forEach(style => {
+  IMAGE_STYLE_MAP.set(style.id, { ...style, category: 'main' });
 });
 
 interface InputSectionProps {
@@ -32,8 +30,8 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, step }) => {
 
   // 이미지 모델 설정
   const [imageModelId, setImageModelId] = useState<ImageModelId>('gemini-2.5-flash-image');
-  // Gemini 스타일 설정
-  const [geminiStyleId, setGeminiStyleId] = useState<GeminiStyleId>('gemini-none');
+  // 이미지 스타일 설정 (ConGen)
+  const [imageStyleId, setImageStyleId] = useState<ImageStyleId>('default');
   const [geminiCustomStylePrompt, setGeminiCustomStylePrompt] = useState('');
 
   // 프로젝트 관리
@@ -76,8 +74,8 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, step }) => {
     const savedModelId = getElevenLabsModelId();
     const savedImageModel = localStorage.getItem(CONFIG.STORAGE_KEYS.IMAGE_MODEL) as ImageModelId || CONFIG.DEFAULT_IMAGE_MODEL;
 
-    // Gemini 스타일 설정 로드
-    const savedGeminiStyle = localStorage.getItem(CONFIG.STORAGE_KEYS.GEMINI_STYLE) as GeminiStyleId || 'gemini-none';
+    // 이미지 스타일 설정 로드 (ConGen)
+    const savedImageStyle = localStorage.getItem(CONFIG.STORAGE_KEYS.IMAGE_STYLE) as ImageStyleId || 'default';
     const savedGeminiCustomStyle = localStorage.getItem(CONFIG.STORAGE_KEYS.GEMINI_CUSTOM_STYLE) || '';
 
     // TTS 엔진 설정 로드
@@ -89,7 +87,7 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, step }) => {
     setElVoiceId(savedVoiceId);
     setElModelId(savedModelId);
     setImageModelId(savedImageModel);
-    setGeminiStyleId(savedGeminiStyle);
+    setImageStyleId(savedImageStyle);
     setGeminiCustomStylePrompt(savedGeminiCustomStyle);
 
     // 저장된 프로젝트 목록 로드
@@ -262,10 +260,10 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, step }) => {
     localStorage.setItem(CONFIG.STORAGE_KEYS.IMAGE_MODEL, modelId);
   }, []);
 
-  // Gemini 스타일 선택 (useCallback으로 메모이제이션)
-  const selectGeminiStyle = useCallback((styleId: GeminiStyleId) => {
-    setGeminiStyleId(styleId);
-    localStorage.setItem(CONFIG.STORAGE_KEYS.GEMINI_STYLE, styleId);
+  // 이미지 스타일 선택 (ConGen)
+  const selectImageStyle = useCallback((styleId: ImageStyleId) => {
+    setImageStyleId(styleId);
+    localStorage.setItem(CONFIG.STORAGE_KEYS.IMAGE_STYLE, styleId);
   }, []);
 
   // Gemini 커스텀 스타일 저장 (useCallback으로 메모이제이션)
@@ -335,16 +333,10 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, step }) => {
     alert(`프로젝트 "${project.name}" 업데이트 완료!`);
   };
 
-  // 선택된 Gemini 스타일 정보 가져오기 (useMemo로 캐싱 - O(1) 조회)
-  const selectedGeminiStyle = useMemo(() => {
-    if (geminiStyleId === 'gemini-none') {
-      return { id: 'gemini-none', name: '없음', category: '기본', prompt: '' };
-    }
-    if (geminiStyleId === 'gemini-custom') {
-      return { id: 'gemini-custom', name: '커스텀', category: '직접 입력', prompt: geminiCustomStylePrompt };
-    }
-    return GEMINI_STYLE_MAP.get(geminiStyleId) || null;
-  }, [geminiStyleId, geminiCustomStylePrompt]);
+  // 선택된 이미지 스타일 정보 가져오기 (ConGen)
+  const selectedImageStyle = useMemo(() => {
+    return IMAGE_STYLE_MAP.get(imageStyleId) || IMAGE_STYLE_MAP.get('default') || null;
+  }, [imageStyleId]);
 
   // 성별 필터링된 기본 음성 목록
   const filteredDefaultVoices = useMemo(() => {
@@ -1135,7 +1127,7 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, step }) => {
                   <span className="text-lg">🎨</span>
                   <label className="text-xs font-bold text-slate-400">Gemini 화풍 선택</label>
                 </div>
-                {selectedGeminiStyle && selectedGeminiStyle.id !== 'gemini-none' && (
+                {selectedGeminiStyle && selectedGeminiStyle.id !== 'default' && (
                   <span className="text-xs text-emerald-400">
                     {selectedGeminiStyle?.category} &gt; {selectedGeminiStyle?.name}
                   </span>
@@ -1146,9 +1138,9 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, step }) => {
               <div className="mb-4">
                 <button
                   type="button"
-                  onClick={() => selectGeminiStyle('gemini-none')}
+                  onClick={() => selectImageStyle('default')}
                   className={`px-4 py-2 rounded-lg text-xs font-medium transition-all ${
-                    geminiStyleId === 'gemini-none'
+                    imageStyleId === 'default'
                       ? 'bg-slate-600 text-white ring-2 ring-slate-400'
                       : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700 hover:text-white'
                   }`}
@@ -1159,7 +1151,7 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, step }) => {
               </div>
 
               {/* 카테고리별 스타일 버튼 */}
-              {GEMINI_STYLE_CATEGORIES.map((category) => (
+              {IMAGE_STYLES.map((category) => (
                 <div key={category.id} className="mb-4">
                   <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">
                     {category.name}
@@ -1169,9 +1161,9 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, step }) => {
                       <button
                         key={style.id}
                         type="button"
-                        onClick={() => selectGeminiStyle(style.id as GeminiStyleId)}
+                        onClick={() => selectImageStyle(style.id as GeminiStyleId)}
                         className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                          geminiStyleId === style.id
+                          imageStyleId === style.id
                             ? 'bg-emerald-500 text-white'
                             : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700 hover:text-white'
                         }`}
@@ -1188,9 +1180,9 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, step }) => {
                 <div className="flex items-center gap-2 mb-2">
                   <button
                     type="button"
-                    onClick={() => selectGeminiStyle('gemini-custom')}
+                    onClick={() => selectImageStyle('gemini-custom')}
                     className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                      geminiStyleId === 'gemini-custom'
+                      imageStyleId === 'gemini-custom'
                         ? 'bg-teal-500 text-white'
                         : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700 hover:text-white'
                     }`}
@@ -1200,7 +1192,7 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, step }) => {
                   <span className="text-[10px] text-slate-500">직접 화풍 설명 입력</span>
                 </div>
 
-                {geminiStyleId === 'gemini-custom' && (
+                {imageStyleId === 'gemini-custom' && (
                   <div className="mt-2">
                     <textarea
                       value={geminiCustomStylePrompt}
