@@ -10,7 +10,7 @@ import { CategorySelector } from '../Common/CategorySelector';
 import { StyleSelector } from '../Common/StyleSelector';
 import { CharacterSelector } from '../Common/CharacterSelector';
 import { CONFIG } from '../../config';
-import type { ImageModelId, VideoFormatType, ContentCategory, ImageStyleId, CharacterConfig } from '../../types';
+import type { ImageModelId, VideoFormat, ContentCategory, ImageStyleId, CharacterConfig } from '../../types';
 
 export interface Step1SettingsProps {
   onNext: () => void;
@@ -21,7 +21,7 @@ export const Step1Settings: React.FC<Step1SettingsProps> = ({ onNext }) => {
   const [imageModel, setImageModel] = useState<ImageModelId>(() => {
     return (localStorage.getItem(CONFIG.STORAGE_KEYS.IMAGE_MODEL) as ImageModelId) || 'nano-banana-2';
   });
-  const [videoFormat, setVideoFormat] = useState<VideoFormatType>('16:9');
+  const [videoFormat, setVideoFormat] = useState<VideoFormat>('landscape');
   const [category, setCategory] = useState<ContentCategory>('general');
   const [style, setStyle] = useState<ImageStyleId>('default');
   const [character, setCharacter] = useState<CharacterConfig>({ type: 'none', referenceImages: [] });

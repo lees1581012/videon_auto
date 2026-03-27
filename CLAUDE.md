@@ -1,25 +1,28 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+ConGen - 콘텐츠 자동 생성 플랫폼 (6단계 위저드 기반 AI 영상 자동화 시스템)
 
 ## 프로젝트 개요
 
-**AutoGen AI V9.2** - AI 기반 스토리보드 & 영상 자동 생성 앱
+**ConGen** - AI 기반 스토리보드 & 영상 자동 생성 플랫폼
 
 주요 기능:
-- 키워드/대본 입력 → AI가 자동으로 스토리보드 생성
-- 씬별 이미지 생성 (Gemini 2.5 Flash Image / Flux.1 Schnell)
-- TTS 음성 생성 (ElevenLabs + 타임스탬프 자막)
-- 이미지→영상 애니메이션 변환 (fal.ai PixVerse v5.5)
-- MP4 렌더링 및 내보내기
+- 6단계 위저드 방식 콘텐츠 생성 (설정 → 대본 → 음성 → 이미지 → 영상 → 완성)
+- 콘텐츠 카테고리 시스템 (일반, 경제, 여행, 다크심리학, 역사, 선사시대)
+- 이미지 스타일 17가지 (일반, 웹툰, 지브리, 수채화, 시네마틱, 애니메이션 등)
+- 이미지 생성 모델 다양화 (Nano Banana, Nano Banana 2, Nano Banana Pro, Z-Image LoRA)
+- TTS 엔진 3종 지원 (Gemini TTS 무료, ElevenLabs 고품질, Edge TTS)
+- 캐릭터 시스템 (없음/수아/커스텀)
+- 영상 효과 확장 (트랜지션, 자막 번인, 비네팅, 페이드, 블러, 줌)
+- MP4 렌더링 및 SRT 자막 내보내기
 
-## 개발 명령어
+## 실행 방법
 
 ```bash
 # 의존성 설치
 npm install
 
-# 개발 서버 실행 (포트 3000)
+# 개발 서버 실행 (포트 5173)
 npm run dev
 
 # 프로덕션 빌드
@@ -34,133 +37,250 @@ npm run preview
 `.env.local` 파일에 API 키 설정:
 ```
 GEMINI_API_KEY=your_gemini_api_key
-FAL_API_KEY=your_fal_api_key           # Flux 이미지 + PixVerse 영상용
-ELEVENLABS_API_KEY=your_elevenlabs_key  # TTS용
-ELEVENLABS_VOICE_ID=your_voice_id       # 선택적
+FAL_API_KEY=your_fal_api_key           # PixVerse 영상 변환용
+ELEVENLABS_API_KEY=your_elevenlabs_key  # TTS용 (선택)
 ```
 
-앱 내 설정 패널에서도 API 키 입력 가능 (localStorage에 저장)
+또는 앱 내 [⚙️ 설정] 메뉴에서 API 키 입력 가능 (localStorage 저장)
 
 ## 기술 스택
 
-- **프레임워크**: React 19 + TypeScript
-- **빌드 도구**: Vite 6
+- **프레임워크**: React 19 + TypeScript + Vite 6
+- **UI**: TailwindCSS (어두운 테마, 주황색 포인트 #F97316)
 - **AI 서비스**:
-  - Google Gemini API (`@google/genai`) - 스크립트 생성, 이미지 생성, TTS
-  - fal.ai - Flux.1 이미지 생성, PixVerse 영상 변환
-  - ElevenLabs - 고품질 TTS + 타임스탬프 자막
+  - Google Gemini API (`@google/genai`) - 스크립트, 이미지, TTS
+  - fal.ai - PixVerse 영상 변환
+  - ElevenLabs - 고품질 TTS + 자막 싱크
+  - Edge TTS (Python 서버) - 무료 한국어 TTS
 
-## 아키텍처
+## 6단계 워크플로우
 
-### 데이터 흐름
 ```
-사용자 입력 (키워드/대본)
-    ↓
-[geminiService] 트렌드 검색 → 스크립트 생성 (씬 분할)
-                └── 긴 대본(3000자+) → generateScriptChunked()로 청크 분할 처리
-    ↓
-[imageService] 씬별 이미지 생성 (Gemini or Flux 라우팅)
-    ↓
-[elevenLabsService] 나레이션 TTS + 자막 타임스탬프
-    ↓
-[falService] 이미지→영상 애니메이션 변환 (수동 버튼 방식)
-    ↓
-[videoService] MP4 렌더링 및 내보내기 (자막 하드코딩 옵션)
+1단계: 영상 설정 (Step1Settings)
+   - 이미지 생성 모델 선택
+   - 영상 비율 선택 (16:9, 1:1, 3:4, 9:16)
+   - 콘텐츠 카테고리 선택 (6개)
+   - 이미지 스타일 선택 (17가지)
+   - 캐릭터 선택 (없음/수아/커스텀)
+
+2단계: 대본 생성 (Step2Script)
+   - 프로젝트명 입력
+   - 대본 입력
+   - AI 씬 분할 (Gemini API)
+   - 씬 편집/삭제/합치기
+
+3단계: 음성 생성 (Step3Voice)
+   - TTS 엔진 선택 (Gemini 무료 / ElevenLabs 추천)
+   - 음성 선택
+   - 미리듣기
+   - 음성 생성
+
+4단계: 이미지 생성 (Step4Image)
+   - 씬별 이미지 자동 생성
+   - 개별 재생성
+   - 이미지 업로드
+
+5단계: 영상 효과 (Step5VideoCompose)
+   - 트랜지션 설정
+   - 자막 번인, 비네팅, 페이드, 블러
+   - 서서히 확대 설정
+   - 영상 생성 시작
+
+6단계: 완성 (Step6Complete)
+   - 영상 미리보기
+   - MP4 다운로드
+   - SRT 자막 내보내기
+   - 새 프로젝트 시작
 ```
 
-### 핵심 서비스 (`services/`)
+## 파일 구조
 
-| 파일 | 역할 |
-|------|------|
-| `geminiService.ts` | Gemini API 통합 (트렌드 검색, 스크립트 생성, 이미지 생성, TTS 폴백, 자막 분리) |
-| `imageService.ts` | 이미지 생성 라우터 - 선택된 모델(Gemini/Flux)로 라우팅, 캐릭터 참조 처리 |
-| `prompts.ts` | V10.0 프롬프트 엔진 - 의미 기반 시각화, 색상 시스템, 타이포그래피 규칙, 캐릭터 등장 판단 |
-| `elevenLabsService.ts` | ElevenLabs TTS + 타임스탬프 자막 생성, AI 의미 단위 분리 |
-| `falService.ts` | fal.ai 통합 (Flux.1 Schnell 이미지, PixVerse v5.5 영상) |
-| `videoService.ts` | MP4 렌더링 (자막 하드코딩 포함) |
-| `projectService.ts` | 프로젝트 저장/불러오기 (localStorage) |
-| `srtService.ts` | SRT 자막 파일 생성 |
+```
+src/
+├── App.tsx                    # 기존 앱 (레거시 호환용)
+├── ConGenApp.tsx             # 새로운 ConGen 6단계 앱
+├── components/
+│   ├── Layout/
+│   │   ├── Sidebar.tsx       # 좌측 사이드바
+│   │   ├── StepIndicator.tsx # 상단 6단계 진행 바
+│   │   └── PageLayout.tsx    # 전체 레이아웃
+│   ├── Steps/
+│   │   ├── Step1Settings.tsx   # 1단계: 영상 설정
+│   │   ├── Step2Script.tsx     # 2단계: 대본 생성
+│   │   ├── Step3Voice.tsx      # 3단계: 음성 생성
+│   │   ├── Step4Image.tsx      # 4단계: 이미지 생성
+│   │   ├── Step5VideoCompose.tsx # 5단계: 영상 효과
+│   │   └── Step6Complete.tsx   # 6단계: 완성
+│   ├── Settings/
+│   │   └── ApiKeyManager.tsx  # API 키 관리
+│   ├── Common/
+│   │   ├── CategorySelector.tsx  # 카테고리 선택 (6개)
+│   │   ├── StyleSelector.tsx     # 이미지 스타일 선택 (17개)
+│   │   ├── ModelSelector.tsx     # 이미지 모델 선택
+│   │   ├── CharacterSelector.tsx # 캐릭터 선택
+│   │   └── VideoFormatSelector.tsx # 영상 비율 선택
+│   ├── Header.tsx               # 헤더
+│   ├── InputSection.tsx        # 기존 입력 컴포넌트
+│   ├── ResultTable.tsx         # 기존 결과 테이블
+│   └── ProjectGallery.tsx      # 프로젝트 갤러리
+├── services/
+│   ├── geminiService.ts        # Gemini API 통합
+│   ├── geminiTtsService.ts     # Gemini TTS 전용
+│   ├── imageService.ts         # 이미지 생성 라우터
+│   ├── elevenLabsService.ts    # ElevenLabs TTS
+│   ├── edgeTtsService.ts       # Edge TTS 로컬 서버 연동
+│   ├── falService.ts           # fal.ai 통합
+│   ├── videoService.ts         # MP4 렌더링
+│   ├── projectService.ts       # 프로젝트 저장/불러오기
+│   ├── srtService.ts           # SRT 자막 생성
+│   ├── prompts.ts              # V10.0 프롬프트 엔진
+│   └── exportService.ts        # 엑셀/ZIP 내보내기
+├── config.ts                   # 전역 설정
+├── types.ts                    # 타입 정의
+└── utils/
+    └── csvHelper.ts           # CSV/ZIP 내보내기
+```
 
-### 주요 타입 (`types.ts`)
+## 핵심 타입
 
-- `ScriptScene` - 씬 데이터 (나레이션, visualPrompt, analysis)
-- `GeneratedAsset` - 생성된 에셋 (이미지, 오디오, 자막, 영상, status 포함)
-- `ReferenceImages` - 참조 이미지 (캐릭터/스타일 분리, 강도 조절 0~100)
-- `SubtitleData` - 자막 타임스탬프 데이터 (단어별 + 의미 단위 청크)
-- `CostBreakdown` - 비용 추적 (이미지, TTS, 영상별 비용 및 개수)
+- **AppStep**: 6단계 스텝 (SETTINGS=1, SCRIPT=2, VOICE=3, IMAGE=4, VIDEO_COMPOSE=5, COMPLETE=6)
+- **ContentCategory**: 콘텐츠 카테고리 ('general', 'economy', 'travel', 'dark_psychology', 'history', 'prehistoric')
+- **ImageStyleId**: 이미지 스타일 (17가지: 'default', 'webtoon', 'ghibli' 등)
+- **ImageModelId**: 이미지 모델 ('nano-banana', 'nano-banana-2', 'nano-banana-pro', 'z-image-lora', 'gemini-2.5-flash-image')
+- **CharacterType**: 캐릭터 타입 ('none', 'sua', 'custom')
+- **TtsEngine**: TTS 엔진 ('gemini', 'elevenlabs', 'edge')
+- **VideoEffectSettings**: 영상 효과 설정
 
-### 설정 (`config.ts`)
+## 전역 설정 (config.ts)
 
-- `IMAGE_MODELS` - 이미지 생성 모델 목록 및 가격
-- `FLUX_STYLE_CATEGORIES` / `GEMINI_STYLE_CATEGORIES` - 화풍 프리셋
-- `ELEVENLABS_MODELS` - TTS 모델 목록
-- `PRICING` - API 가격 정보 (USD→KRW 변환)
-- `CONFIG.STORAGE_KEYS` - localStorage 키 이름
-- `CONFIG.ANIMATION` - 애니메이션 설정 (ENABLED_SCENES, VIDEO_DURATION)
+### CONTENT_CATEGORIES (6개)
+- general: 일반
+- economy: 경제 (주식/금융/부동산, 상승=빨강, 하락=파랑)
+- travel: 여행 (랜드마크/풍경)
+- dark_psychology: 다크심리학 (심리조종/관계)
+- history: 역사 (전쟁/왕조/인물)
+- prehistoric: 선사시대 (공룡/진화/화석)
 
-## 프롬프트 시스템 (`prompts.ts`)
+### IMAGE_STYLES (17가지)
+- default, webtoon, ghibli, watercolor, cinematic, animation, minimal, 3d_cartoon
+- pixel_art, vintage, sketch, realistic, chibi, storybook, editorial
+- emotional_animation, infographic
 
-V10.0 "문장→이미지 자동 생성 시스템" 핵심 원칙:
+### IMAGE_MODELS
+- nano-banana: 빠른 생성 (무료)
+- nano-banana-2: 가성비 최고 · 고품질 (무료, 추천)
+- nano-banana-pro: 프로급 품질 (유료)
+- z-image-lora: 50steps 저렴한 가격 (fal.ai)
+- gemini-2.5-flash-image: 기존 Gemini (호환용)
 
-1. **의미 기반 시각화** - 문장의 의미를 이해하고 그대로 시각화
-   - "컴퓨터" → 컴퓨터를 그려라
-   - "발전된 자동차" → 미래적인 자동차를 그려라
+### GEMINI_TTS_VOICES (30개)
+- Kore, Zephyr, Puck, Charon, Fenrir, Leda, Orus, Aoede, 등...
 
-2. **수식어 반영** - 형용사/부사를 시각에 반영
-   - "거대한" → 크게, "빛나는" → 광택/발광
+### TTS 엔진 비교
+| 엔진 | 가격 | 자막 싱크 | 장점 |
+|------|------|-----------|------|
+| Gemini TTS | 무료 | 지원 안함 | 완전 무료 |
+| Edge TTS | 무료 | 지원 안함 | 로컬 서버 필요 |
+| ElevenLabs | 유료 | 지원 | 고품질, 추천 |
 
-3. **캐릭터 등장 규칙**:
-   - NO_CHAR: 주어가 수치/데이터/추상 시스템 ("GDP가 상승", "시장이 과열")
-   - STANDARD/MICRO/MACRO: 주어가 사람 ("투자자가 고민", "소비자가 결정")
+### DEFAULT_VIDEO_EFFECTS
+- transition: 'none'
+- subtitleBurnIn: true
+- vignetting: false
+- fadeInOut: false
+- blurIntro: false
+- slowZoom: 105 (5% 서서히 확대)
 
-4. **구도 시스템**:
-   - MICRO (5-15%): 작은 캐릭터 + 큰 사물
-   - STANDARD (30-40%): 캐릭터와 사물 상호작용
-   - MACRO (60-80%): 캐릭터 클로즈업
-   - NO_CHAR: 캐릭터 없음 (사물/텍스트만)
+## UI 테마
 
-5. **한국 금융 색상** - 상승=빨강, 하락=파랑 (미국과 반대)
+- 배경: #0F0F0F (메인), #1A1A1A (카드), #0A0A0A (사이드바)
+- 포인트: #F97316 (주황)
+- 텍스트: #FFFFFF (제목), #D1D5DB (본문), #6B7280 (부가 설명)
+- 둥근 모서리: rounded-xl (12px) 또는 rounded-2xl (16px)
 
-6. **고유명사 표시** - 대본에 쓰인 언어 그대로 표시 (삼성→삼성, NVIDIA→NVIDIA)
+## Edge TTS 서버 설정 (선택사항)
 
-## App.tsx 핵심 패턴
+무료 한국어 TTS를 사용하려면 별도 터미널에서 Python 서버 실행:
 
-### 비용 추적 시스템
+```bash
+# Python 패키지 설치
+pip install edge-tts fastapi uvicorn
+
+# TTS 서버 실행
+python tts-server.py
+```
+
+서버는 http://localhost:5555에서 실행됨
+
+## 주요 서비스 함수
+
+### 이미지 생성
 ```typescript
-// costRef로 실시간 비용 누적
-const costRef = useRef<CostBreakdown>({...});
-const addCost = (type: 'image' | 'tts' | 'video', amount: number, count: number) => {...};
+import { generateImage, getSelectedImageModel, getSelectedImageStyle } from './services/imageService';
+
+const imageData = await generateImage(scene, referenceImages, aspectRatio);
 ```
 
-### 병렬 처리
+### 음성 생성
 ```typescript
-// 이미지와 오디오 병렬 생성
-await Promise.all([runAudio(), runImages()]);
+// Gemini TTS
+import { generateAudioWithGeminiTts, createGeminiTtsSubtitles } from './services/geminiTtsService';
+const result = await generateAudioWithGeminiTts(narration, 'Kore');
+const subtitles = await createGeminiTtsSubtitles(narration, result.audioDuration);
+
+// ElevenLabs
+import { generateAudioWithElevenLabs } from './services/elevenLabsService';
+const result = await generateAudioWithElevenLabs(narration);
+
+// Edge TTS
+import { generateAudioWithEdgeTts } from './services/edgeTtsService';
+const result = await generateAudioWithEdgeTts(narration, 'ko-KR-SunHiNeural');
 ```
 
-### 재시도 로직
-- 이미지/TTS 생성 실패 시 최대 2회 재시도
-- Rate Limit 에러 시 대기 후 재시도
-- 모든 재시도 실패 시 폴백 (ElevenLabs → Gemini TTS)
+### 영상 렌더링
+```typescript
+import { generateVideo } from './services/videoService';
+const result = await generateVideo(scenes, audioData, imageData, videoEffects);
+```
 
-### 참조 이미지 처리
-- `hasCharacterRef`가 true면 고정 캐릭터 프롬프트(`VAR_BASE_CHAR`) 제외
-- 참조 이미지의 캐릭터를 따르도록 프롬프트 조정
+## API 키 관리
 
-## 컴포넌트 구조
+앱 내 [⚙️ 설정] 메뉴 또는 localStorage:
+- CONFIG.STORAGE_KEYS.GEMINI_API_KEY
+- CONFIG.STORAGE_KEYS.ELEVENLABS_API_KEY_STORED
+- CONFIG.STORAGE_KEYS.FAL_API_KEY_STORED
 
-- `App.tsx` - 메인 앱 로직 (생성 플로우, 상태 관리, 비용 추적)
-- `components/InputSection.tsx` - 입력 폼 (키워드, 대본, 참조 이미지, 설정)
-- `components/ResultTable.tsx` - 생성 결과 테이블 (이미지 재생성, 애니메이션 버튼)
-- `components/ProjectGallery.tsx` - 저장된 프로젝트 갤러리
-- `components/Header.tsx` - 헤더
+## 마이그레이션 안내
 
-## 주의사항
+### 기존 App.tsx → ConGenApp.tsx
+- 기존 App.tsx는 유지 (레거시 호환성)
+- 새로운 ConGenApp.tsx는 6단계 위저드 방식
+- main.tsx에서 진입점을 변경하여 사용
 
-- 참조 이미지가 있으면 고정 캐릭터 프롬프트(`VAR_BASE_CHAR`) 제외
-- Flux.1은 참조 이미지 미지원 → 스타일 프롬프트로 대체
-- ElevenLabs 타임스탬프는 `with-timestamps` 엔드포인트 사용
-- 영상 변환은 수동 버튼 클릭 방식 (자동 변환 비활성화)
-- 비용 추적은 실시간으로 `costRef`에 누적
-- 긴 대본(3000자 초과)은 `generateScriptChunked()`로 청크 분할 처리
-- TTS Rate Limit 대응: 씬 간 1.5초 딜레이, 실패 시 3초 대기 후 재시도
+### localStorage 키 변경
+- 기존: 'tubegen_*' 접두사
+- 새로운: 'congen_*' 접두사
+- 하위 호환성 유지를 위해 기존 키도 읽기 시도 구현
+
+## 개발 팁
+
+### 빌드 오류: /index.css not found
+- 경고이며 무시해도 됨 (빌드는 성공)
+- CSS는 index.html에서 인라인으로 처리됨
+
+### 새 컴포넌트 추가 시
+1. components/Steps/ 에 새 파일 생성
+2. types.ts에 필요한 타입 추가
+3. config.ts에 설정 상수 추가
+4. ConGenApp.tsx에 스텝 케이스 추가
+
+### 스타일 추가 시
+- TailwindCSS 클래스 사용 (기본 제공됨)
+- 색상: bg-orange-500 (주황), text-gray-300, bg-gray-800 등
+- 라운드: rounded-lg, rounded-xl, rounded-2xl
+
+## 브랜치 정보
+
+- 메인 브랜치: `imagemaker`
+- ConGen 작업 브랜치: `congen-refactor`
+- 깃허브: https://github.com/lees1581012/videon_auto
